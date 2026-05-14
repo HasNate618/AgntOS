@@ -53,8 +53,13 @@
   '';
 
   system.activationScripts.ghostty-config = ''
-    mkdir -p /home/developer/.config/ghostty
+  system.activationScripts.ghostty-config = ''
+    mkdir -p /home/developer/.config/ghostty /home/developer/.config
     ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
+    grep -q 'TerminalApplication' /home/developer/.config/kdeglobals 2>/dev/null || \
+      sed -i '/^\[General\]/a TerminalApplication=ghostty' /home/developer/.config/kdeglobals 2>/dev/null || \
+      printf '[General]\nTerminalApplication=ghostty\n' >> /home/developer/.config/kdeglobals
+    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals
   '';
 
   system.stateVersion = "24.11";
