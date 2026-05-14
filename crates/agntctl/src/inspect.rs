@@ -35,49 +35,79 @@ impl SystemInfo {
     pub fn display(&self) -> String {
         let mut out = String::new();
 
-        out.push_str(&format!("{} v{} {}\n", self.os.name, self.os.version_id, self.os.id));
+        out.push_str(&format!(
+            "{} v{} {}\n",
+            self.os.name, self.os.version_id, self.os.id
+        ));
         out.push_str(&format!("  Hostname: {}\n", self.hostname));
-        out.push_str(&format!("  Kernel:   {} ({})\n", self.kernel.release, self.kernel.arch));
-        out.push_str(&format!("  Uptime:   {}\n", self.uptime.as_ref().map(|u| u.human()).unwrap_or_default()));
+        out.push_str(&format!(
+            "  Kernel:   {} ({})\n",
+            self.kernel.release, self.kernel.arch
+        ));
+        out.push_str(&format!(
+            "  Uptime:   {}\n",
+            self.uptime.as_ref().map(|u| u.human()).unwrap_or_default()
+        ));
 
         out.push_str(&format!("\nCPU:\n"));
         out.push_str(&format!("  Model:  {}\n", self.cpu.model));
-        out.push_str(&format!("  Cores:  {} physical / {} logical\n", self.cpu.cores, self.cpu.threads));
+        out.push_str(&format!(
+            "  Cores:  {} physical / {} logical\n",
+            self.cpu.cores, self.cpu.threads
+        ));
         out.push_str(&format!("  Arch:   {}\n", self.cpu.arch));
         if let Some(ref freq) = self.cpu.max_freq {
             out.push_str(&format!("  Max:    {} MHz\n", freq));
         }
 
         out.push_str(&format!("\nMemory:\n"));
-        out.push_str(&format!("  Total:     {}\n", bytes_human(self.memory.total_kb * 1024)));
-        out.push_str(&format!("  Available: {} ({:.0}%)\n",
+        out.push_str(&format!(
+            "  Total:     {}\n",
+            bytes_human(self.memory.total_kb * 1024)
+        ));
+        out.push_str(&format!(
+            "  Available: {} ({:.0}%)\n",
             bytes_human(self.memory.available_kb * 1024),
-            self.memory.available_pct()));
-        out.push_str(&format!("  Swap:      {} total, {} free\n",
+            self.memory.available_pct()
+        ));
+        out.push_str(&format!(
+            "  Swap:      {} total, {} free\n",
             bytes_human(self.memory.swap_total_kb * 1024),
-            bytes_human(self.memory.swap_free_kb * 1024)));
+            bytes_human(self.memory.swap_free_kb * 1024)
+        ));
 
         if !self.gpu.is_empty() {
             out.push_str(&format!("\nGPU:\n"));
             for gpu in &self.gpu {
-                out.push_str(&format!("  {}: {} (driver: {})\n",
-                    gpu.vendor, gpu.model, gpu.driver));
+                out.push_str(&format!(
+                    "  {}: {} (driver: {})\n",
+                    gpu.vendor, gpu.model, gpu.driver
+                ));
             }
         }
 
         if !self.disks.is_empty() {
             out.push_str(&format!("\nDisks:\n"));
             for disk in &self.disks {
-                out.push_str(&format!("  {:<8} {:>8} {}\n",
-                    disk.name, bytes_human(disk.size_bytes), disk.mount.as_deref().unwrap_or("")));
+                out.push_str(&format!(
+                    "  {:<8} {:>8} {}\n",
+                    disk.name,
+                    bytes_human(disk.size_bytes),
+                    disk.mount.as_deref().unwrap_or("")
+                ));
             }
         }
 
         if !self.network.is_empty() {
             out.push_str(&format!("\nNetwork:\n"));
             for iface in &self.network {
-                out.push_str(&format!("  {:<8} {}  {}  {}\n",
-                    iface.name, iface.state, iface.mac, iface.ip.as_deref().unwrap_or("")));
+                out.push_str(&format!(
+                    "  {:<8} {}  {}  {}\n",
+                    iface.name,
+                    iface.state,
+                    iface.mac,
+                    iface.ip.as_deref().unwrap_or("")
+                ));
             }
         }
 
@@ -180,7 +210,11 @@ fn hostname() -> String {
 fn os_info() -> OsInfo {
     let data = read_keyval_file("/etc/os-release");
     OsInfo {
-        name: data.get("PRETTY_NAME").or_else(|| data.get("NAME")).cloned().unwrap_or_default(),
+        name: data
+            .get("PRETTY_NAME")
+            .or_else(|| data.get("NAME"))
+            .cloned()
+            .unwrap_or_default(),
         version: data.get("VERSION").cloned().unwrap_or_default(),
         version_id: data.get("VERSION_ID").cloned().unwrap_or_default(),
         id: data.get("ID").cloned().unwrap_or_default(),
@@ -189,7 +223,8 @@ fn os_info() -> OsInfo {
 
 fn kernel_info() -> KernelInfo {
     KernelInfo {
-        release: read_first_line("/proc/sys/kernel/osrelease").unwrap_or_else(|| cmd_output("uname -r").unwrap_or_default()),
+        release: read_first_line("/proc/sys/kernel/osrelease")
+            .unwrap_or_else(|| cmd_output("uname -r").unwrap_or_default()),
         version: read_first_line("/proc/sys/kernel/version").unwrap_or_default(),
         arch: cmd_output("uname -m").unwrap_or_default(),
     }
@@ -198,22 +233,54 @@ fn kernel_info() -> KernelInfo {
 fn cpu_info() -> CpuInfo {
     let data = read_colon_file("/proc/cpuinfo");
     let model = data.get("model name").cloned().unwrap_or_default();
-    let cores = data.get("cpu cores").and_then(|s| s.parse().ok()).unwrap_or(0);
-    let siblings = data.get("siblings").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let cores = data
+        .get("cpu cores")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let siblings = data
+        .get("siblings")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let freq = data.get("cpu MHz").cloned();
     let arch = cmd_output("uname -m").unwrap_or_default();
 
-    CpuInfo { model, arch, cores, threads: siblings, max_freq: freq }
+    CpuInfo {
+        model,
+        arch,
+        cores,
+        threads: siblings,
+        max_freq: freq,
+    }
 }
 
 fn memory_info() -> MemoryInfo {
     let data = read_colon_file("/proc/meminfo");
     MemoryInfo {
-        total_kb: data.get("MemTotal").map(|s| parse_kb(s)).flatten().unwrap_or(0),
-        available_kb: data.get("MemAvailable").map(|s| parse_kb(s)).flatten().unwrap_or(0),
-        free_kb: data.get("MemFree").map(|s| parse_kb(s)).flatten().unwrap_or(0),
-        swap_total_kb: data.get("SwapTotal").map(|s| parse_kb(s)).flatten().unwrap_or(0),
-        swap_free_kb: data.get("SwapFree").map(|s| parse_kb(s)).flatten().unwrap_or(0),
+        total_kb: data
+            .get("MemTotal")
+            .map(|s| parse_kb(s))
+            .flatten()
+            .unwrap_or(0),
+        available_kb: data
+            .get("MemAvailable")
+            .map(|s| parse_kb(s))
+            .flatten()
+            .unwrap_or(0),
+        free_kb: data
+            .get("MemFree")
+            .map(|s| parse_kb(s))
+            .flatten()
+            .unwrap_or(0),
+        swap_total_kb: data
+            .get("SwapTotal")
+            .map(|s| parse_kb(s))
+            .flatten()
+            .unwrap_or(0),
+        swap_free_kb: data
+            .get("SwapFree")
+            .map(|s| parse_kb(s))
+            .flatten()
+            .unwrap_or(0),
     }
 }
 
@@ -229,7 +296,9 @@ fn gpu_info() -> Vec<GpuInfo> {
                 continue; // skip render nodes and connectors
             }
             let dev_path = entry.path().join("device");
-            if !dev_path.exists() { continue; }
+            if !dev_path.exists() {
+                continue;
+            }
 
             let vendor_id = read_first_line(&dev_path.join("vendor")).unwrap_or_default();
             let device_id = read_first_line(&dev_path.join("device")).unwrap_or_default();
@@ -240,8 +309,12 @@ fn gpu_info() -> Vec<GpuInfo> {
 
             // Try to get a human-readable name via lspci
             let model = if !vendor_id.is_empty() && !device_id.is_empty() {
-                cmd_output(&format!("lspci -d {}:{} -mm", vendor_id.trim_start_matches("0x"), device_id.trim_start_matches("0x")))
-                    .unwrap_or_default()
+                cmd_output(&format!(
+                    "lspci -d {}:{} -mm",
+                    vendor_id.trim_start_matches("0x"),
+                    device_id.trim_start_matches("0x")
+                ))
+                .unwrap_or_default()
             } else {
                 String::new()
             };
@@ -284,7 +357,11 @@ fn disk_info() -> Vec<DiskInfo> {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
             // Skip loop, ram, dm, zram devices
-            if name.starts_with("loop") || name.starts_with("ram") || name.starts_with("dm-") || name.starts_with("zram") {
+            if name.starts_with("loop")
+                || name.starts_with("ram")
+                || name.starts_with("dm-")
+                || name.starts_with("zram")
+            {
                 continue;
             }
             let size_str = read_first_line(&entry.path().join("size")).unwrap_or_default();
@@ -310,7 +387,9 @@ fn network_info() -> Vec<NetworkInfo> {
     if let Ok(entries) = std::fs::read_dir("/sys/class/net") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name == "lo" { continue; }
+            if name == "lo" {
+                continue;
+            }
 
             let mac = read_first_line(&entry.path().join("address")).unwrap_or_default();
             let state = match read_first_line(&entry.path().join("operstate")).as_deref() {
@@ -321,7 +400,12 @@ fn network_info() -> Vec<NetworkInfo> {
             // Try to find IP
             let ip = find_ip(&name);
 
-            ifaces.push(NetworkInfo { name, mac: mac.trim().to_string(), ip, state: state.to_string() });
+            ifaces.push(NetworkInfo {
+                name,
+                mac: mac.trim().to_string(),
+                ip,
+                state: state.to_string(),
+            });
         }
     }
     ifaces
@@ -336,7 +420,9 @@ fn uptime_info() -> Option<UptimeInfo> {
 // ── Helpers ──
 
 fn read_first_line(path: impl AsRef<Path>) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|s| s.lines().next().unwrap_or("").to_string())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.lines().next().unwrap_or("").to_string())
 }
 
 fn read_keyval_file(path: &str) -> std::collections::HashMap<String, String> {
@@ -345,7 +431,7 @@ fn read_keyval_file(path: &str) -> std::collections::HashMap<String, String> {
     for line in content.iter().flat_map(|s| s.lines()) {
         if let Some(eq) = line.find('=') {
             let key = line[..eq].trim().to_string();
-            let val = line[eq+1..].trim().trim_matches('"').to_string();
+            let val = line[eq + 1..].trim().trim_matches('"').to_string();
             map.insert(key, val);
         }
     }
@@ -360,7 +446,7 @@ fn read_colon_file(path: &str) -> std::collections::HashMap<String, String> {
     for line in content.iter().flat_map(|s| s.lines()) {
         if let Some(colon) = line.find(':') {
             let key = line[..colon].trim().to_string();
-            let val = line[colon+1..].trim().to_string();
+            let val = line[colon + 1..].trim().to_string();
             // Only insert first occurrence (cpuinfo has per-core entries)
             map.entry(key).or_insert(val);
         }
@@ -378,7 +464,9 @@ fn cmd_output(cmd: &str) -> Option<String> {
 
 fn cmd_output_opt(cmd: &str) -> Option<String> {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
-    if parts.is_empty() { return None; }
+    if parts.is_empty() {
+        return None;
+    }
     std::process::Command::new(parts[0])
         .args(&parts[1..])
         .output()
@@ -401,20 +489,27 @@ fn find_mount(device: &str) -> Option<String> {
     std::fs::read_to_string("/proc/mounts").ok().and_then(|s| {
         for line in s.lines() {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && (parts[0].ends_with(device) || parts[0].contains(&format!("/{}", device))) {
+            if parts.len() >= 2
+                && (parts[0].ends_with(device) || parts[0].contains(&format!("/{}", device)))
+            {
                 return Some(parts[1].to_string());
             }
         }
         // Check /proc/self/mountinfo for bind mounts
-        std::fs::read_to_string("/proc/self/mountinfo").ok().and_then(|m| {
-            for line in m.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 5 && (parts[3].ends_with(device) || parts[4].ends_with(&format!("/{}", device))) {
-                    return Some(parts[4].to_string());
+        std::fs::read_to_string("/proc/self/mountinfo")
+            .ok()
+            .and_then(|m| {
+                for line in m.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 5
+                        && (parts[3].ends_with(device)
+                            || parts[4].ends_with(&format!("/{}", device)))
+                    {
+                        return Some(parts[4].to_string());
+                    }
                 }
-            }
-            None
-        })
+                None
+            })
     })
 }
 

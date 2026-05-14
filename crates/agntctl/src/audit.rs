@@ -10,7 +10,11 @@ pub fn get_log_path(config_dir: Option<&PathBuf>) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_LOG_DIR).join("audit.jsonl"))
 }
 
-pub fn execute_list(limit: usize, json: bool, config_dir: Option<&PathBuf>) -> Result<String, String> {
+pub fn execute_list(
+    limit: usize,
+    json: bool,
+    config_dir: Option<&PathBuf>,
+) -> Result<String, String> {
     let log_path = get_log_path(config_dir);
     let log = AuditLog::load(&log_path)?;
 
@@ -26,7 +30,10 @@ pub fn execute_list(limit: usize, json: bool, config_dir: Option<&PathBuf>) -> R
     }
 
     let mut out = String::new();
-    out.push_str(&format!("Recent audit entries ({} shown):\n\n", entries.len()));
+    out.push_str(&format!(
+        "Recent audit entries ({} shown):\n\n",
+        entries.len()
+    ));
     for entry in entries {
         let ts = entry.timestamp.format("%Y-%m-%d %H:%M:%S");
         let status = match entry.result {
@@ -34,7 +41,10 @@ pub fn execute_list(limit: usize, json: bool, config_dir: Option<&PathBuf>) -> R
             AuditResult::Failed { .. } => "FAIL",
             AuditResult::Pending { .. } => "PENDING",
         };
-        out.push_str(&format!("  {} | {} | {:8} | {}\n", entry.id, ts, status, entry.summary));
+        out.push_str(&format!(
+            "  {} | {} | {:8} | {}\n",
+            entry.id, ts, status, entry.summary
+        ));
     }
     Ok(out)
 }
@@ -43,7 +53,10 @@ pub fn execute_show(id: &str, json: bool, config_dir: Option<&PathBuf>) -> Resul
     let log_path = get_log_path(config_dir);
     let log = AuditLog::load(&log_path)?;
 
-    let entry = log.entries.iter().find(|e| e.id == id)
+    let entry = log
+        .entries
+        .iter()
+        .find(|e| e.id == id)
         .ok_or_else(|| format!("Audit entry not found: {}", id))?;
 
     if json {
@@ -53,7 +66,13 @@ pub fn execute_show(id: &str, json: bool, config_dir: Option<&PathBuf>) -> Resul
 
     let ts = entry.timestamp.format("%Y-%m-%d %H:%M:%S");
     let status = match &entry.result {
-        AuditResult::Success { message } => format!("Success{}", message.as_ref().map(|m| format!(": {}", m)).unwrap_or_default()),
+        AuditResult::Success { message } => format!(
+            "Success{}",
+            message
+                .as_ref()
+                .map(|m| format!(": {}", m))
+                .unwrap_or_default()
+        ),
         AuditResult::Failed { error } => format!("Failed: {}", error),
         AuditResult::Pending { reason } => format!("Pending: {}", reason),
     };
@@ -61,7 +80,12 @@ pub fn execute_show(id: &str, json: bool, config_dir: Option<&PathBuf>) -> Resul
     let files = if entry.files_changed.is_empty() {
         "  (none)".to_string()
     } else {
-        entry.files_changed.iter().map(|f| format!("  - {}", f)).collect::<Vec<_>>().join("\n")
+        entry
+            .files_changed
+            .iter()
+            .map(|f| format!("  - {}", f))
+            .collect::<Vec<_>>()
+            .join("\n")
     };
 
     let rollback = entry.rollback_hint.as_deref().unwrap_or("(none)");
@@ -84,7 +108,9 @@ pub fn log_inspect(target: &str, config_dir: Option<&PathBuf>) -> Result<(), Str
     let entry = AuditEntry {
         id: audit_id(),
         timestamp: Utc::now(),
-        action: AuditAction::Inspect { target: target.to_string() },
+        action: AuditAction::Inspect {
+            target: target.to_string(),
+        },
         actor: "user".to_string(),
         summary: format!("Inspected {}", target),
         files_changed: Vec::new(),
@@ -101,20 +127,32 @@ mod tests {
 
     #[test]
     fn test_execute_list_no_entries() {
-        let result = execute_list(10, false, Some(&PathBuf::from("/tmp/nonexistent-agntos-test")));
+        let result = execute_list(
+            10,
+            false,
+            Some(&PathBuf::from("/tmp/nonexistent-agntos-test")),
+        );
         assert!(result.is_ok());
         assert!(result.unwrap().contains("No audit entries"));
     }
 
     #[test]
     fn test_execute_list_empty_json() {
-        let result = execute_list(10, true, Some(&PathBuf::from("/tmp/nonexistent-agntos-test")));
+        let result = execute_list(
+            10,
+            true,
+            Some(&PathBuf::from("/tmp/nonexistent-agntos-test")),
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_show_not_found() {
-        let result = execute_show("nonexistent", false, Some(&PathBuf::from("/tmp/agntos-audit-test")));
+        let result = execute_show(
+            "nonexistent",
+            false,
+            Some(&PathBuf::from("/tmp/agntos-audit-test")),
+        );
         assert!(result.is_err());
     }
 

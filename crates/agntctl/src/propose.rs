@@ -4,7 +4,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
 
-pub fn execute(description: &str, dry_run: bool, config_dir: Option<&PathBuf>) -> Result<String, String> {
+pub fn execute(
+    description: &str,
+    dry_run: bool,
+    config_dir: Option<&PathBuf>,
+) -> Result<String, String> {
     let dir = config_dir
         .cloned()
         .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_DIR));
@@ -77,7 +81,11 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
             ),
         })
     } else if lower.starts_with("remove ") || lower.starts_with("uninstall ") {
-        let prefix = if lower.starts_with("remove ") { "remove " } else { "uninstall " };
+        let prefix = if lower.starts_with("remove ") {
+            "remove "
+        } else {
+            "uninstall "
+        };
         let package = sanitize_package_name(lower.strip_prefix(prefix).unwrap().trim());
         Ok(ConfigProposal {
             id,
@@ -157,7 +165,8 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
                     description
                 ),
             )],
-            rollback_guidance: "Check the audit log before rolling back custom changes.".to_string(),
+            rollback_guidance: "Check the audit log before rolling back custom changes."
+                .to_string(),
         })
     }
 }

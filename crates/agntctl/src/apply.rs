@@ -5,7 +5,12 @@ use std::path::PathBuf;
 
 const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
 
-pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: Option<&PathBuf>) -> Result<String, String> {
+pub fn execute(
+    proposal_id: &str,
+    dry_run: bool,
+    no_rebuild: bool,
+    config_dir: Option<&PathBuf>,
+) -> Result<String, String> {
     let dir = config_dir
         .cloned()
         .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_DIR));
@@ -18,7 +23,10 @@ pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: O
         .map_err(|_| format!("Invalid proposal file: {}", proposal_id))?;
 
     let mut out = String::new();
-    out.push_str(&format!("Applying proposal: {} ({})\n", proposal.id, proposal.summary));
+    out.push_str(&format!(
+        "Applying proposal: {} ({})\n",
+        proposal.id, proposal.summary
+    ));
 
     // Write the Nix files
     let mut written_files = Vec::new();
@@ -29,8 +37,9 @@ pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: O
         } else {
             // Ensure parent directory exists
             if let Some(parent) = filepath.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("Failed to create directory {}: {}", parent.display(), e)
+                })?;
             }
             std::fs::write(&filepath, content)
                 .map_err(|e| format!("Failed to write {}: {}", filepath.display(), e))?;
@@ -59,15 +68,27 @@ pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: O
                         }
                     }
                 } else {
-                    out.push_str(&format!("  nixos-rebuild test: FAILED (exit code: {})\n", output.status));
+                    out.push_str(&format!(
+                        "  nixos-rebuild test: FAILED (exit code: {})\n",
+                        output.status
+                    ));
                     if !stderr.is_empty() {
                         for line in stderr.lines() {
                             out.push_str(&format!("    ! {}\n", line));
                         }
                     }
                     // Log the failure
-                    let _ = log_apply(&proposal, &written_files, Err("nixos-rebuild failed".to_string()), &dir, dry_run);
-                    return Err(format!("nixos-rebuild test failed. Check the audit log.\n{}", out));
+                    let _ = log_apply(
+                        &proposal,
+                        &written_files,
+                        Err("nixos-rebuild failed".to_string()),
+                        &dir,
+                        dry_run,
+                    );
+                    return Err(format!(
+                        "nixos-rebuild test failed. Check the audit log.\n{}",
+                        out
+                    ));
                 }
             }
             Err(e) => {
@@ -82,7 +103,10 @@ pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: O
     // Clean up the proposal file
     if !dry_run {
         let _ = std::fs::remove_file(&proposal_path);
-        out.push_str(&format!("\n  Removed proposal: {}\n", proposal_path.display()));
+        out.push_str(&format!(
+            "\n  Removed proposal: {}\n",
+            proposal_path.display()
+        ));
     }
 
     // Log the apply
@@ -91,7 +115,10 @@ pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: O
         out.push_str(&format!("  Warning: failed to log audit entry: {}\n", e));
     }
 
-    out.push_str(&format!("\nRollback guidance:\n  {}\n", proposal.rollback_guidance));
+    out.push_str(&format!(
+        "\nRollback guidance:\n  {}\n",
+        proposal.rollback_guidance
+    ));
 
     if dry_run {
         out = format!("{}\nDRY RUN — nothing applied.\n", out.trim());
@@ -100,7 +127,13 @@ pub fn execute(proposal_id: &str, dry_run: bool, no_rebuild: bool, config_dir: O
     Ok(out)
 }
 
-fn log_apply(proposal: &ConfigProposal, files: &[String], result: Result<(), String>, config_dir: &PathBuf, dry_run: bool) -> Result<(), String> {
+fn log_apply(
+    proposal: &ConfigProposal,
+    files: &[String],
+    result: Result<(), String>,
+    config_dir: &PathBuf,
+    dry_run: bool,
+) -> Result<(), String> {
     if dry_run {
         return Ok(());
     }
@@ -119,7 +152,9 @@ fn log_apply(proposal: &ConfigProposal, files: &[String], result: Result<(), Str
     let entry = AuditEntry {
         id: audit_id(),
         timestamp: Utc::now(),
-        action: AuditAction::Apply { proposal_id: proposal.id.clone() },
+        action: AuditAction::Apply {
+            proposal_id: proposal.id.clone(),
+        },
         actor: "user".to_string(),
         summary,
         files_changed: files.to_vec(),
@@ -143,9 +178,11 @@ mod tests {
             id: id.to_string(),
             summary: "Test: install hello".to_string(),
             nix_changes: "environment.systemPackages = [ pkgs.hello ];".to_string(),
-            files_to_write: vec![
-                ("packages.nix".to_string(), "{ config, pkgs, ... }: {\n  environment.systemPackages = [ pkgs.hello ];\n}".to_string()),
-            ],
+            files_to_write: vec![(
+                "packages.nix".to_string(),
+                "{ config, pkgs, ... }: {\n  environment.systemPackages = [ pkgs.hello ];\n}"
+                    .to_string(),
+            )],
             rollback_guidance: "Remove hello from packages.nix.".to_string(),
         };
         let json = serde_json::to_string_pretty(&proposal).unwrap();
@@ -154,7 +191,12 @@ mod tests {
 
     #[test]
     fn test_apply_missing_proposal() {
-        let result = execute("nonexistent", true, true, Some(&PathBuf::from("/tmp/agntos-apply-test")));
+        let result = execute(
+            "nonexistent",
+            true,
+            true,
+            Some(&PathBuf::from("/tmp/agntos-apply-test")),
+        );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Proposal not found"));
     }

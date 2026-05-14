@@ -93,8 +93,7 @@ impl AuditLog {
             .map_err(|e| format!("Failed to open audit log: {}", e))?;
         let json = serde_json::to_string(entry)
             .map_err(|e| format!("Failed to serialize audit entry: {}", e))?;
-        writeln!(file, "{}", json)
-            .map_err(|e| format!("Failed to write audit entry: {}", e))?;
+        writeln!(file, "{}", json).map_err(|e| format!("Failed to write audit entry: {}", e))?;
         Ok(())
     }
 

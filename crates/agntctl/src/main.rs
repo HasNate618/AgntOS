@@ -7,10 +7,12 @@
 //   audit    - View activity log
 //   rollback - Show or trigger rollback
 
-mod inspect;
-mod propose;
 mod apply;
 mod audit;
+mod inspect;
+mod memory;
+mod model;
+mod propose;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -92,6 +94,58 @@ enum Command {
         #[arg(long)]
         config_dir: Option<PathBuf>,
     },
+    /// View or resolve model routing configuration
+    Model {
+        /// Action: list or route <task>
+        #[arg(default_value = "list")]
+        action: String,
+
+        /// Task class (for "route")
+        #[arg(required = false)]
+        task: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
+    },
+    /// Manage Hermes-style memory files
+    Memory {
+        /// Action: show | add | replace | remove
+        #[arg(default_value = "show")]
+        action: String,
+
+        /// File: memory or user
+        #[arg(required = false)]
+        file: Option<String>,
+
+        /// Section name for add
+        #[arg(long)]
+        section: Option<String>,
+
+        /// Content for add
+        #[arg(long)]
+        content: Option<String>,
+
+        /// Substring to replace/remove
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Replacement text for replace
+        #[arg(long)]
+        replacement: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
+    },
     /// Show rollback guidance
     Rollback {
         #[arg(default_value = "list")]
@@ -120,7 +174,10 @@ fn main() {
                     } else {
                         println!("CPU:");
                         println!("  Model:  {}", info.cpu.model);
-                        println!("  Cores:  {} physical / {} logical", info.cpu.cores, info.cpu.threads);
+                        println!(
+                            "  Cores:  {} physical / {} logical",
+                            info.cpu.cores, info.cpu.threads
+                        );
                         println!("  Arch:   {}", info.cpu.arch);
                         if let Some(ref freq) = info.cpu.max_freq {
                             println!("  Max:    {} MHz", freq);
@@ -134,12 +191,16 @@ fn main() {
                     } else {
                         println!("Memory:");
                         println!("  Total:     {}", bytes_human(info.memory.total_kb * 1024));
-                        println!("  Available: {} ({:.0}%)",
+                        println!(
+                            "  Available: {} ({:.0}%)",
                             bytes_human(info.memory.available_kb * 1024),
-                            info.memory.available_pct());
-                        println!("  Swap:      {} total, {} free",
+                            info.memory.available_pct()
+                        );
+                        println!(
+                            "  Swap:      {} total, {} free",
                             bytes_human(info.memory.swap_total_kb * 1024),
-                            bytes_human(info.memory.swap_free_kb * 1024));
+                            bytes_human(info.memory.swap_free_kb * 1024)
+                        );
                     }
                 }
                 "gpu" => {
@@ -151,7 +212,11 @@ fn main() {
                     } else {
                         println!("GPU:");
                         for gpu in &info.gpu {
-                            let model = if gpu.model.is_empty() { &gpu.device_id } else { &gpu.model };
+                            let model = if gpu.model.is_empty() {
+                                &gpu.device_id
+                            } else {
+                                &gpu.model
+                            };
                             println!("  {}: {} (driver: {})", gpu.vendor, model, gpu.driver);
                         }
                     }
@@ -165,7 +230,12 @@ fn main() {
                     } else {
                         println!("Disks:");
                         for disk in &info.disks {
-                            println!("  {:<8} {:>9} {}", disk.name, bytes_human(disk.size_bytes), disk.mount.as_deref().unwrap_or(""));
+                            println!(
+                                "  {:<8} {:>9} {}",
+                                disk.name,
+                                bytes_human(disk.size_bytes),
+                                disk.mount.as_deref().unwrap_or("")
+                            );
                         }
                     }
                 }
@@ -178,7 +248,13 @@ fn main() {
                     } else {
                         println!("Network:");
                         for iface in &info.network {
-                            println!("  {:<8} {}  {}  {}", iface.name, iface.state, iface.mac, iface.ip.as_deref().unwrap_or(""));
+                            println!(
+                                "  {:<8} {}  {}  {}",
+                                iface.name,
+                                iface.state,
+                                iface.mac,
+                                iface.ip.as_deref().unwrap_or("")
+                            );
                         }
                     }
                 }
@@ -188,49 +264,165 @@ fn main() {
                 }
             }
         }
-        Command::Propose { description, json, dry_run, config_dir } => {
-            match propose::execute(&description, dry_run, config_dir.as_ref()) {
-                Ok(output) => {
-                    if json {
-                        println!("{{\"status\": \"ok\", \"output\": {}}}", serde_json::to_string(&output).unwrap());
-                    } else {
-                        print!("{}", output);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Command::Apply { id, dry_run, no_rebuild, config_dir } => {
-            match apply::execute(&id, dry_run, no_rebuild, config_dir.as_ref()) {
-                Ok(output) => {
+        Command::Propose {
+            description,
+            json,
+            dry_run,
+            config_dir,
+        } => match propose::execute(&description, dry_run, config_dir.as_ref()) {
+            Ok(output) => {
+                if json {
+                    println!(
+                        "{{\"status\": \"ok\", \"output\": {}}}",
+                        serde_json::to_string(&output).unwrap()
+                    );
+                } else {
                     print!("{}", output);
                 }
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Command::Apply {
+            id,
+            dry_run,
+            no_rebuild,
+            config_dir,
+        } => match apply::execute(&id, dry_run, no_rebuild, config_dir.as_ref()) {
+            Ok(output) => {
+                print!("{}", output);
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Command::Audit {
+            action,
+            id,
+            limit,
+            json,
+            config_dir,
+        } => match action.as_str() {
+            "list" => match audit::execute_list(limit, json, config_dir.as_ref()) {
+                Ok(output) => print!("{}", output),
+                Err(e) => eprintln!("Error: {}", e),
+            },
+            "show" => {
+                let entry_id = id.as_deref().unwrap_or("show");
+                match audit::execute_show(entry_id, json, config_dir.as_ref()) {
+                    Ok(output) => print!("{}", output),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            other => {
+                eprintln!("Unknown audit action: {}. Use 'list' or 'show <id>'", other);
+                std::process::exit(1);
+            }
+        },
+        Command::Model {
+            action,
+            task,
+            json,
+            config_dir,
+        } => {
+            let result = match action.as_str() {
+                "list" => model::execute_list(json, config_dir.as_ref()),
+                "route" => {
+                    let task = task
+                        .as_deref()
+                        .ok_or_else(|| "Usage: agntctl model route <task>".to_string());
+                    match task {
+                        Ok(t) => model::execute_route(t, json, config_dir.as_ref()),
+                        Err(e) => Err(e),
+                    }
+                }
+                other => Err(format!(
+                    "Unknown model action: {}. Use 'list' or 'route <task>'",
+                    other
+                )),
+            };
+
+            match result {
+                Ok(output) => print!("{}", output),
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     std::process::exit(1);
                 }
             }
         }
-        Command::Audit { action, id, limit, json, config_dir } => {
-            match action.as_str() {
-                "list" => {
-                    match audit::execute_list(limit, json, config_dir.as_ref()) {
-                        Ok(output) => print!("{}", output),
-                        Err(e) => eprintln!("Error: {}", e),
+        Command::Memory {
+            action,
+            file,
+            section,
+            content,
+            target,
+            replacement,
+            json,
+            config_dir,
+        } => {
+            let result = match action.as_str() {
+                "show" => memory::execute_show(file.as_deref(), json, config_dir.as_ref()),
+                "add" => {
+                    let file = file
+                        .as_deref()
+                        .ok_or_else(|| "Usage: agntctl memory add <memory|user> --section <name> --content <text>".to_string());
+                    let section = section
+                        .as_deref()
+                        .ok_or_else(|| "Missing --section for memory add".to_string());
+                    let content = content
+                        .as_deref()
+                        .ok_or_else(|| "Missing --content for memory add".to_string());
+
+                    match (file, section, content) {
+                        (Ok(f), Ok(s), Ok(c)) => memory::execute_add(f, s, c, config_dir.as_ref()),
+                        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => Err(e),
                     }
                 }
-                "show" => {
-                    let entry_id = id.as_deref().unwrap_or("show");
-                    match audit::execute_show(entry_id, json, config_dir.as_ref()) {
-                        Ok(output) => print!("{}", output),
-                        Err(e) => eprintln!("Error: {}", e),
+                "replace" => {
+                    let file = file
+                        .as_deref()
+                        .ok_or_else(|| "Usage: agntctl memory replace <memory|user> --target <substring> --replacement <text>".to_string());
+                    let target = target
+                        .as_deref()
+                        .ok_or_else(|| "Missing --target for memory replace".to_string());
+                    let replacement = replacement
+                        .as_deref()
+                        .ok_or_else(|| "Missing --replacement for memory replace".to_string());
+
+                    match (file, target, replacement) {
+                        (Ok(f), Ok(t), Ok(r)) => {
+                            memory::execute_replace(f, t, r, config_dir.as_ref())
+                        }
+                        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => Err(e),
                     }
                 }
-                other => {
-                    eprintln!("Unknown audit action: {}. Use 'list' or 'show <id>'", other);
+                "remove" => {
+                    let file = file.as_deref().ok_or_else(|| {
+                        "Usage: agntctl memory remove <memory|user> --target <substring>"
+                            .to_string()
+                    });
+                    let target = target
+                        .as_deref()
+                        .ok_or_else(|| "Missing --target for memory remove".to_string());
+
+                    match (file, target) {
+                        (Ok(f), Ok(t)) => memory::execute_remove(f, t, config_dir.as_ref()),
+                        (Err(e), _) | (_, Err(e)) => Err(e),
+                    }
+                }
+                other => Err(format!(
+                    "Unknown memory action: {}. Use show/add/replace/remove",
+                    other
+                )),
+            };
+
+            match result {
+                Ok(output) => print!("{}", output),
+                Err(e) => {
+                    eprintln!("Error: {}", e);
                     std::process::exit(1);
                 }
             }

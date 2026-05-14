@@ -3,8 +3,18 @@
 // CLI chat loop that parses user intent, calls agntctl tools,
 // shows output, and handles approval flows.
 
+mod llm;
+
+use agnt_common::memory::{CoreMemory, MemoryFile};
+use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 use std::process::Command;
+
+struct LlmState {
+    client: llm::LlmClient,
+    messages: Vec<Value>,
+    tools: Vec<Value>,
+}
 
 const AGNTCTL: &str = "agntctl";
 
@@ -43,6 +53,18 @@ fn find_agntctl() -> String {
 fn main() {
     println!("agntd: AgntOS agent daemon");
     println!("type 'help' for commands, 'quit' to exit.\n");
+
+    let mut llm_state = init_llm_state();
+    if let Some((_, state)) = &llm_state {
+        println!(
+            "LLM mode: enabled (task=chat, profile={}, model={})\n",
+            state.client.profile_name, state.client.profile.model
+        );
+    } else {
+        println!(
+            "LLM mode: disabled (configure /etc/agntos/models.toml or set AGNTOS_CONFIG_DIR)\n"
+        );
+    }
 
     let mut history: Vec<String> = Vec::new();
 
@@ -100,12 +122,65 @@ fn main() {
                 handle_audit(&lower);
             }
             _ => {
-                // Fallback: pass to agntctl as generic propose
-                println!("  I didn't understand that. Trying as a generic proposal...");
-                handle_propose(&lower, &input);
+                // Fallback: route to LLM agent mode if configured.
+                if let Some((runtime, state)) = llm_state.as_mut() {
+                    if let Err(e) = handle_llm_input(&input, runtime, state) {
+                        println!("  LLM error: {}", e);
+                    }
+                } else {
+                    println!("  I didn't understand that. Trying as a generic proposal...");
+                    handle_propose(&lower, &input);
+                }
             }
         }
     }
+}
+
+fn init_llm_state() -> Option<(tokio::runtime::Runtime, LlmState)> {
+    let cfg = config_dir_str();
+    let runtime = tokio::runtime::Runtime::new().ok()?;
+    let client = llm::LlmClient::from_config(&cfg, "chat").ok()?;
+    let inspect_summary = capture_inspect("system");
+    let _ = seed_memory_if_empty(&cfg, &inspect_summary);
+    let system_prompt = llm::build_system_prompt(&cfg, &inspect_summary);
+
+    let state = LlmState {
+        client,
+        messages: vec![json!({
+            "role": "system",
+            "content": system_prompt,
+        })],
+        tools: llm::tool_definitions(),
+    };
+
+    Some((runtime, state))
+}
+
+fn seed_memory_if_empty(config_dir: &str, inspect_summary: &str) -> Result<(), String> {
+    let mut mem = CoreMemory::load(config_dir)?;
+    if !mem.memory.trim().is_empty() {
+        return Ok(());
+    }
+
+    let compact = inspect_summary
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .take(8)
+        .collect::<Vec<_>>()
+        .join(" | ");
+
+    if compact.is_empty() {
+        return Ok(());
+    }
+
+    let seeded = if compact.chars().count() > 280 {
+        format!("{}...", compact.chars().take(277).collect::<String>())
+    } else {
+        compact
+    };
+
+    mem.add(MemoryFile::Memory, "System", &seeded)
 }
 
 fn read_line() -> Option<String> {
@@ -130,6 +205,9 @@ fn show_help() {
     println!("  apply <id>             Apply an approved proposal");
     println!("  audit                  Show recent audit log");
     println!("  audit show <id>        Show audit entry details");
+    println!(
+        "  <free text>            Send to LLM tool-calling mode (if models.toml is configured)"
+    );
     println!("  help                   Show this help");
     println!("  quit | exit            Exit");
 }
@@ -207,9 +285,7 @@ fn capture_inspect(target: &str) -> String {
                 format!("(inspect failed)")
             }
         }
-        Err(_e) => {
-            fallback_inspect(target)
-        }
+        Err(_e) => fallback_inspect(target),
     }
 }
 
@@ -224,29 +300,45 @@ fn fallback_inspect(target: &str) -> String {
         "cpu" => {
             let model = std::fs::read_to_string("/proc/cpuinfo")
                 .ok()
-                .and_then(|s| s.lines().find(|l| l.starts_with("model name"))
-                    .map(|l| l.split(':').nth(1).unwrap_or("unknown").trim().to_string()))
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| l.starts_with("model name"))
+                        .map(|l| l.split(':').nth(1).unwrap_or("unknown").trim().to_string())
+                })
                 .unwrap_or_else(|| "unknown".into());
             let cores = std::fs::read_to_string("/proc/cpuinfo")
                 .ok()
-                .map(|s| s.lines().filter(|l| l.trim().starts_with("processor")).count())
+                .map(|s| {
+                    s.lines()
+                        .filter(|l| l.trim().starts_with("processor"))
+                        .count()
+                })
                 .unwrap_or(0);
             format!("CPU: {}\nCores: {}", model, cores)
         }
-        "memory" | "mem" => {
-            std::fs::read_to_string("/proc/meminfo")
-                .ok()
-                .and_then(|s| {
-                    s.lines().find(|l| l.starts_with("MemTotal"))
-                        .map(|l| format!("Memory Total: {}", l.split(':').nth(1).unwrap_or("unknown").trim()))
+        "memory" | "mem" => std::fs::read_to_string("/proc/meminfo")
+            .ok()
+            .and_then(|s| {
+                s.lines().find(|l| l.starts_with("MemTotal")).map(|l| {
+                    format!(
+                        "Memory Total: {}",
+                        l.split(':').nth(1).unwrap_or("unknown").trim()
+                    )
                 })
-                .unwrap_or_else(|| "Memory: unknown".into())
-        }
+            })
+            .unwrap_or_else(|| "Memory: unknown".into()),
         _ => {
             let os = std::fs::read_to_string("/etc/os-release")
                 .ok()
-                .and_then(|s| s.lines().find(|l| l.starts_with("PRETTY_NAME"))
-                    .map(|l| l.split('=').nth(1).unwrap_or("unknown").trim_matches('"').to_string()))
+                .and_then(|s| {
+                    s.lines().find(|l| l.starts_with("PRETTY_NAME")).map(|l| {
+                        l.split('=')
+                            .nth(1)
+                            .unwrap_or("unknown")
+                            .trim_matches('"')
+                            .to_string()
+                    })
+                })
                 .unwrap_or_else(|| "AgntOS (unknown)".into());
             let kernel = std::process::Command::new("uname")
                 .arg("-r")
@@ -287,7 +379,11 @@ fn handle_install(lower: &str, _original: &str) {
 }
 
 fn handle_remove(lower: &str, _original: &str) {
-    let prefix = if lower.starts_with("remove ") { "remove " } else { "uninstall " };
+    let prefix = if lower.starts_with("remove ") {
+        "remove "
+    } else {
+        "uninstall "
+    };
     let package = lower.strip_prefix(prefix).unwrap().trim();
     if package.is_empty() {
         println!("  Usage: remove <package>");
@@ -397,13 +493,21 @@ fn handle_propose(lower: &str, _original: &str) {
 }
 
 fn handle_apply(lower: &str) {
-    let id = lower.strip_prefix("apply ").unwrap_or(lower).split_whitespace().next().unwrap_or("");
+    let id = lower
+        .strip_prefix("apply ")
+        .unwrap_or(lower)
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
     if id.is_empty() {
         println!("  Usage: apply <proposal-id>");
         return;
     }
 
-    if !confirm(&format!("  Apply proposal {}? This may change system configuration.", id)) {
+    if !confirm(&format!(
+        "  Apply proposal {}? This may change system configuration.",
+        id
+    )) {
         println!("  Cancelled.");
         return;
     }
@@ -450,6 +554,247 @@ fn handle_audit(lower: &str) {
     }
 }
 
+fn handle_llm_input(
+    input: &str,
+    runtime: &mut tokio::runtime::Runtime,
+    state: &mut LlmState,
+) -> Result<(), String> {
+    state.messages.push(json!({
+        "role": "user",
+        "content": input,
+    }));
+
+    let mut depth = 0;
+    while depth < 6 {
+        depth += 1;
+        let resp = runtime.block_on(state.client.complete(&state.messages, &state.tools))?;
+        state.messages.push(resp.assistant_message.clone());
+
+        if resp.tool_calls.is_empty() {
+            if !resp.content.trim().is_empty() {
+                for line in resp.content.lines() {
+                    println!("  {}", line);
+                }
+            } else {
+                println!("  (no response text)");
+            }
+            return Ok(());
+        }
+
+        for tc in &resp.tool_calls {
+            let result = match execute_tool_call(tc) {
+                Ok(s) => s,
+                Err(e) => format!("TOOL_ERROR: {}", e),
+            };
+            state.messages.push(json!({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": result,
+            }));
+        }
+    }
+
+    Err("Tool-call depth limit reached".to_string())
+}
+
+fn execute_tool_call(tc: &llm::ToolCall) -> Result<String, String> {
+    let cfg = config_dir_str();
+    let args = tc.arguments.as_object().cloned().unwrap_or_default();
+
+    match tc.name.as_str() {
+        "inspect" => {
+            let target = args
+                .get("target")
+                .and_then(|v| v.as_str())
+                .unwrap_or("system");
+            command_result(run_agntctl(&["inspect", target]))
+        }
+        "propose" => {
+            let description = args
+                .get("description")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: description".to_string())?;
+            command_result(run_agntctl(&["propose", "--config-dir", &cfg, description]))
+        }
+        "apply" => {
+            let proposal_id = args
+                .get("proposal_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: proposal_id".to_string())?;
+
+            if !confirm(&format!("  LLM requested apply {}. Continue?", proposal_id)) {
+                return Ok("CANCELLED_BY_USER".to_string());
+            }
+
+            let no_rebuild = args
+                .get("no_rebuild")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if no_rebuild {
+                command_result(run_agntctl(&[
+                    "apply",
+                    "--no-rebuild",
+                    "--config-dir",
+                    &cfg,
+                    proposal_id,
+                ]))
+            } else {
+                command_result(run_agntctl(&["apply", "--config-dir", &cfg, proposal_id]))
+            }
+        }
+        "audit" => {
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("list");
+            match action {
+                "show" => {
+                    let id = args.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
+                        "Missing required argument for audit show: id".to_string()
+                    })?;
+                    command_result(run_agntctl(&["audit", "show", id, "--config-dir", &cfg]))
+                }
+                _ => {
+                    let limit_arg = args
+                        .get("limit")
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "20".to_string());
+                    command_result(run_agntctl(&[
+                        "audit",
+                        "list",
+                        "--limit",
+                        &limit_arg,
+                        "--config-dir",
+                        &cfg,
+                    ]))
+                }
+            }
+        }
+        "memory" => {
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("show");
+            match action {
+                "show" => {
+                    let file = args.get("file").and_then(|v| v.as_str());
+                    match file {
+                        Some(f) => command_result(run_agntctl(&[
+                            "memory",
+                            "show",
+                            f,
+                            "--config-dir",
+                            &cfg,
+                        ])),
+                        None => {
+                            command_result(run_agntctl(&["memory", "show", "--config-dir", &cfg]))
+                        }
+                    }
+                }
+                "add" => {
+                    let file = args
+                        .get("file")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory add requires file".to_string())?;
+                    let section = args
+                        .get("section")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory add requires section".to_string())?;
+                    let content = args
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory add requires content".to_string())?;
+                    command_result(run_agntctl(&[
+                        "memory",
+                        "add",
+                        file,
+                        "--section",
+                        section,
+                        "--content",
+                        content,
+                        "--config-dir",
+                        &cfg,
+                    ]))
+                }
+                "replace" => {
+                    let file = args
+                        .get("file")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory replace requires file".to_string())?;
+                    let target = args
+                        .get("target")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory replace requires target".to_string())?;
+                    let replacement = args
+                        .get("replacement")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory replace requires replacement".to_string())?;
+                    command_result(run_agntctl(&[
+                        "memory",
+                        "replace",
+                        file,
+                        "--target",
+                        target,
+                        "--replacement",
+                        replacement,
+                        "--config-dir",
+                        &cfg,
+                    ]))
+                }
+                "remove" => {
+                    let file = args
+                        .get("file")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory remove requires file".to_string())?;
+                    let target = args
+                        .get("target")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "memory remove requires target".to_string())?;
+                    command_result(run_agntctl(&[
+                        "memory",
+                        "remove",
+                        file,
+                        "--target",
+                        target,
+                        "--config-dir",
+                        &cfg,
+                    ]))
+                }
+                other => Err(format!("Unsupported memory action: {}", other)),
+            }
+        }
+        other => Err(format!("Unknown tool: {}", other)),
+    }
+}
+
+fn command_result(cmd: Result<(String, String, bool), String>) -> Result<String, String> {
+    match cmd {
+        Ok((stdout, stderr, success)) => {
+            let mut text = String::new();
+            if !stdout.trim().is_empty() {
+                text.push_str(stdout.trim());
+            }
+            if !stderr.trim().is_empty() {
+                if !text.is_empty() {
+                    text.push_str("\n");
+                }
+                text.push_str("STDERR:\n");
+                text.push_str(stderr.trim());
+            }
+            if text.is_empty() {
+                text.push_str("(no output)");
+            }
+            if success {
+                Ok(text)
+            } else {
+                Err(text)
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
 fn extract_proposal_id(output: &str) -> Option<String> {
     for line in output.lines() {
         if let Some(stripped) = line.strip_prefix("Proposal: ") {
@@ -483,6 +828,9 @@ mod tests {
     #[test]
     fn test_find_agntctl_returns_something() {
         let path = find_agntctl();
-        assert!(!path.is_empty(), "find_agntctl should return a non-empty path");
+        assert!(
+            !path.is_empty(),
+            "find_agntctl should return a non-empty path"
+        );
     }
 }
