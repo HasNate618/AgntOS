@@ -25,6 +25,10 @@ in {
     "agntos/logo.txt".source = "${agntosBranding}/share/agntos/logo.txt";
     "agntos/fastfetch-config.jsonc".source =
       "${agntosBranding}/share/agntos/fastfetch-config.jsonc";
+
+    # Make it the system-wide default so `fastfetch` uses it automatically
+    "fastfetch/config.jsonc".source =
+      "${agntosBranding}/share/agntos/fastfetch-config.jsonc";
   };
 
   # ── Hostname ──
