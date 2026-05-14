@@ -1,3 +1,6 @@
+//! `agntctl model` — lists configured model profiles and resolves task routes
+//! from `/etc/agntos/models.toml`.
+
 use agnt_common::models::ModelsConfig;
 use std::path::PathBuf;
 

@@ -1,3 +1,18 @@
+//! SQLite FTS5 session store for the AgntOS agent.
+//!
+//! Stores every conversation turn (user, assistant, tool) in an append-only
+//! table backed by a FTS5 full-text search index.  Supports `history <query>`
+//! lookups that need to span sessions without adding to the LLM context window.
+//!
+//! ## Schema
+//!
+//! ```sql
+//! CREATE TABLE session_turns (id, session_id, role, content, tool_name, created_at);
+//! CREATE VIRTUAL TABLE session_turns_fts USING fts5(content=session_turns, content_rowid=id);
+//! ```
+//!
+//! Triggers keep the FTS index in sync on INSERT / DELETE / UPDATE.
+
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use std::path::{Path, PathBuf};

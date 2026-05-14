@@ -413,8 +413,12 @@ fn main() {
                         (Err(e), _) | (_, Err(e)) => Err(e),
                     }
                 }
+                "consolidate" => {
+                    let file = file.as_deref().unwrap_or("memory");
+                    memory::execute_consolidate(file, config_dir.as_ref())
+                }
                 other => Err(format!(
-                    "Unknown memory action: {}. Use show/add/replace/remove",
+                    "Unknown memory action: {}. Use show/add/replace/remove/consolidate",
                     other
                 )),
             };

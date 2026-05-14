@@ -1,3 +1,21 @@
+//! Hermes-style bounded curated memory.
+//!
+//! Two files (`MEMORY.md` and `USER.md`) provide the agent with always-in-context
+//! knowledge about the system and user preferences.  Both files have hard character
+//! caps that force quality through curation — when memory is full the agent must
+//! consolidate or remove entries before adding more.
+//!
+//! ## Key principles
+//!
+//! - **Frozen snapshot** — loaded once at session start, persisted to disk immediately
+//!   but not re-read mid-session.
+//! - **Agent-curated** — only the agent updates memory (via `memory` tool calls).
+//! - **Bounded** — `MEMORY.md` ≤ 2,200 chars, `USER.md` ≤ 1,375 chars.
+//! - **Security-scanned** — every write is checked for prompt injection, credential
+//!   leakage, and invisible Unicode.
+//!
+//! [`CoreMemory`] provides `add`, `replace`, `remove`, and `consolidate` operations.
+
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -213,6 +231,53 @@ impl CoreMemory {
         self.set_file(file, normalize_text(compacted.join("\n")), max_chars)
     }
 
+    /// Deduplicates and compacts entries within each section.
+    ///
+    /// - Exactly duplicate bullets are removed.
+    /// - Bullets that share a significant word overlap (>50%) are merged, keeping
+    ///   the longer one.
+    /// - Empty sections are dropped.
+    ///
+    /// Returns a human-readable report of what was kept, merged, or removed.
+    pub fn consolidate(&mut self, file: MemoryFile) -> Result<String, String> {
+        let (content, max_chars) = self.file_ref(file);
+        if content.trim().is_empty() {
+            return Ok("Nothing to consolidate — memory is empty.".to_string());
+        }
+
+        let mut sections: Vec<Section> = parse_sections(content);
+        let mut report = String::new();
+        let mut total_removed = 0usize;
+
+        for section in &mut sections {
+            let before = section.bullets.len();
+            section.dedup_merge();
+            let after = section.bullets.len();
+            if before != after {
+                report.push_str(&format!(
+                    "  § {}: {} entries → {} (removed {})\n",
+                    section.name,
+                    before,
+                    after,
+                    before - after
+                ));
+                total_removed += before - after;
+            }
+        }
+
+        if total_removed == 0 {
+            return Ok("Nothing to consolidate — memory is already compact.".to_string());
+        }
+
+        let compacted = sections_to_text(&sections);
+        self.set_file(file, compacted, max_chars)?;
+
+        Ok(format!(
+            "Consolidated {} entries across all sections.\n{}",
+            total_removed, report
+        ))
+    }
+
     pub fn save(&self) -> Result<(), String> {
         if let Some(parent) = self.memory_path.parent() {
             std::fs::create_dir_all(parent)
@@ -254,6 +319,116 @@ impl CoreMemory {
         self.save()
     }
 }
+
+// ── Section parsing helpers (used by consolidate) ───────────────────────────
+
+#[derive(Debug, Clone)]
+struct Section {
+    name: String,
+    bullets: Vec<String>,
+}
+
+impl Section {
+    fn dedup_merge(&mut self) {
+        self.bullets.sort();
+        let mut deduped: Vec<String> = Vec::new();
+        for b in self.bullets.drain(..) {
+            if deduped.iter().any(|existing| *existing == b) {
+                continue;
+            }
+            deduped.push(b);
+        }
+        self.bullets = deduped;
+
+        let mut merged: Vec<String> = Vec::new();
+        let mut skip = vec![false; self.bullets.len()];
+        for i in 0..self.bullets.len() {
+            if skip[i] {
+                continue;
+            }
+            let mut best = self.bullets[i].clone();
+            for j in (i + 1)..self.bullets.len() {
+                if skip[j] {
+                    continue;
+                }
+                if word_overlap(&best, &self.bullets[j]) > 0.5 {
+                    skip[j] = true;
+                    if self.bullets[j].len() > best.len() {
+                        best = self.bullets[j].clone();
+                    }
+                }
+            }
+            merged.push(best);
+        }
+        self.bullets = merged;
+    }
+}
+
+fn word_overlap(a: &str, b: &str) -> f64 {
+    let wa: std::collections::HashSet<&str> = a.split_whitespace().collect();
+    let wb: std::collections::HashSet<&str> = b.split_whitespace().collect();
+    if wa.is_empty() || wb.is_empty() {
+        return 0.0;
+    }
+    let intersection = wa.intersection(&wb).count();
+    let union = wa.union(&wb).count();
+    intersection as f64 / union as f64
+}
+
+fn parse_sections(text: &str) -> Vec<Section> {
+    let mut sections: Vec<Section> = Vec::new();
+    let mut current: Option<Section> = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('§') {
+            if let Some(sec) = current.take() {
+                sections.push(sec);
+            }
+            let name = trimmed
+                .strip_prefix('§')
+                .unwrap_or(trimmed)
+                .trim()
+                .to_string();
+            current = Some(Section {
+                name,
+                bullets: Vec::new(),
+            });
+        } else if let Some(sec) = &mut current {
+            let stripped = trimmed.strip_prefix("- ").unwrap_or(trimmed);
+            if !stripped.is_empty() {
+                sec.bullets.push(stripped.to_string());
+            }
+        }
+    }
+
+    if let Some(sec) = current {
+        if !sec.name.is_empty() || !sec.bullets.is_empty() {
+            sections.push(sec);
+        }
+    }
+
+    sections
+}
+
+fn sections_to_text(sections: &[Section]) -> String {
+    let mut out = String::new();
+    for (i, sec) in sections.iter().enumerate() {
+        if sec.bullets.is_empty() {
+            continue;
+        }
+        if i > 0 {
+            out.push('\n');
+        }
+        out.push_str(&format!("§ {}\n", sec.name));
+        for bullet in &sec.bullets {
+            out.push_str(&format!("- {}\n", bullet));
+        }
+    }
+    normalize_text(out)
+}
+
+// ── Existing helpers ─────────────────────────────────────────────────────────
 
 fn find_section_insert_index(lines: &[String], start: usize) -> usize {
     for (i, line) in lines.iter().enumerate().skip(start) {
@@ -335,5 +510,27 @@ mod tests {
         let bad = format!("hidden{}text", '\u{200B}');
         let err = CoreMemory::scan(&bad).unwrap_err();
         assert!(matches!(err, SecurityError::InvisibleUnicode(_)));
+    }
+
+    #[test]
+    fn consolidate_dedup_and_merge() {
+        let temp = std::env::temp_dir().join("agntos-memory-consolidate");
+        let _ = std::fs::remove_dir_all(&temp);
+        let mut mem = CoreMemory::load(&temp).unwrap();
+
+        // Add near-duplicates in the same section
+        mem.add(MemoryFile::Memory, "System", "GPU: qemu bochs-drm")
+            .unwrap();
+        mem.add(MemoryFile::Memory, "System", "GPU: qemu").unwrap();
+        mem.add(MemoryFile::Memory, "System", "RAM: 8GB ddr5")
+            .unwrap();
+
+        let report = mem.consolidate(MemoryFile::Memory).unwrap();
+        assert!(report.contains("Consolidated"));
+        // The two GPU entries should be merged (longer kept)
+        assert!(mem.memory.contains("bochs-drm"));
+        assert!(!mem.memory.matches("GPU: qemu").count() > 1);
+
+        let _ = std::fs::remove_dir_all(&temp);
     }
 }

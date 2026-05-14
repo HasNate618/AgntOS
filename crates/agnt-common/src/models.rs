@@ -1,3 +1,12 @@
+//! Model-routing configuration types.
+//!
+//! Parses `/etc/agntos/models.toml` into [`ModelsConfig`], which maps
+//! task-classes (e.g. `"chat"`, `"inspect"`) to [`ModelProfile`] entries
+//! that each hold an OpenAI-compatible endpoint, model name, optional API-key
+//! environment variable, token limit, and temperature.
+//!
+//! No default endpoints are shipped — every user supplies their own.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

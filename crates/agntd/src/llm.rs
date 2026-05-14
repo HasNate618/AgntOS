@@ -1,3 +1,16 @@
+//! OpenAI-compatible LLM client and tool-schema definitions.
+//!
+//! [`LlmClient`] connects to a user-configured endpoint (defined in
+//! `/etc/agntos/models.toml`), sends chat-completion requests with AgntOS
+//! tool definitions, and returns parsed assistant responses including
+//! optional tool-call requests.
+//!
+//! [`tool_definitions`] returns the OpenAI function-calling schema for the
+//! five AgntOS tools: `inspect`, `propose`, `apply`, `audit`, `memory`.
+//!
+//! [`build_system_prompt`] assembles the frozen memory snapshot, system
+//! profile, and behavioural rules into a single system-level message.
+
 use agnt_common::memory::{CoreMemory, MemoryFile};
 use agnt_common::models::{ModelProfile, ModelsConfig};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
@@ -252,12 +265,12 @@ pub fn tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "memory",
-                "description": "Manage persistent memory files.",
+                "description": "Manage persistent memory files. Use 'consolidate' when usage exceeds 80% to deduplicate entries.",
                 "parameters": {
                     "type": "object",
                     "required": ["action"],
                     "properties": {
-                        "action": { "type": "string", "enum": ["show", "add", "replace", "remove"] },
+                        "action": { "type": "string", "enum": ["show", "add", "replace", "remove", "consolidate"] },
                         "file": { "type": "string", "enum": ["memory", "user"] },
                         "section": { "type": "string" },
                         "content": { "type": "string" },

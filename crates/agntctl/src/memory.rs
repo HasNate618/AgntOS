@@ -1,3 +1,6 @@
+//! `agntctl memory` — inspect and edit the Hermes-style bounded memory files
+//! (`MEMORY.md` and `USER.md`).  Supports show / add / replace / remove / consolidate.
+
 use agnt_common::memory::{CoreMemory, MemoryFile};
 use std::path::PathBuf;
 
@@ -152,6 +155,16 @@ pub fn execute_remove(
         usage,
         usage_note(usage)
     ))
+}
+
+/// Consolidates (deduplicates and merges) entries in a memory file.
+pub fn execute_consolidate(file: &str, config_dir: Option<&PathBuf>) -> Result<String, String> {
+    let memory_file = MemoryFile::from_str(file)
+        .ok_or_else(|| "Invalid file. Use 'memory' or 'user'.".to_string())?;
+    let mut core = load_memory(config_dir)?;
+    let report = core.consolidate(memory_file)?;
+    let usage = core.usage_percent(memory_file);
+    Ok(format!("{}{}% used now.\n", report, usage))
 }
 
 #[cfg(test)]
