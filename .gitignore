@@ -1,0 +1,17 @@
+# Nix build outputs
+/result
+/result-*
+
+# Rust build outputs
+/target
+
+# Local environment
+.direnv/
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise
+.DS_Store
+*.swp
+*.swo
