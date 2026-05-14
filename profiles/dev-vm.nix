@@ -26,13 +26,10 @@
   users.users.root.initialPassword = "agntos";
 
   environment.systemPackages = with pkgs; [
-    cargo
-    rustc
-    rust-analyzer
-    clippy
     git
     gcc
     wget
+    rustup
   ];
 
   programs.bash.interactiveShellInit = ''
