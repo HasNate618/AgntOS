@@ -1,6 +1,10 @@
 { config, pkgs, lib, modulesPath, ... }:
 
-{
+let
+  projectRoot = builtins.getEnv "PRJ_ROOT";
+  hasSrc = projectRoot != "";
+in {
+
   imports = [ "${modulesPath}/virtualisation/qemu-vm.nix" ];
 
   boot.kernelParams = [ "console=ttyS0" ];
@@ -10,10 +14,8 @@
     diskSize = 40960;
     cores = 4;
     graphics = true;
-    qemu.options = let
-      src = builtins.getEnv "PRJ_ROOT";
-    in lib.optionals (src != "") [
-      "-virtfs local,path=${src},mount_tag=agntos-source,security_model=none"
+    qemu.options = lib.optionals hasSrc [
+      "-virtfs local,path=${projectRoot},mount_tag=agntos-source,security_model=none"
     ];
   };
 
@@ -21,12 +23,18 @@
   services.openssh.enable = true;
   users.users.root.initialPassword = "agntos";
 
-  # Mount shared folder if PRJ_ROOT is set
-  fileSystems = lib.mkIf (builtins.getEnv "PRJ_ROOT" != "") {
-    "/mnt/agntos-src" = {
-      device = "agntos-source";
-      fsType = "9p";
-      options = [ "trans=virtio" "version=9p2000.L" "msize=1048576" ];
-    };
+  boot.initrd.kernelModules = [ "9p" "9pnet_virtio" ];
+  systemd.services.agntos-mount = lib.mkIf hasSrc {
+    description = "Mount AgntOS source shared folder";
+    after = [ "dev-virtio-ports-agntos-source.device" ];
+    wants = [ "dev-virtio-ports-agntos-source.device" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      mkdir -p /mnt/agntos-src
+      mount -t 9p -o trans=virtio,version=9p2000.L agntos-source /mnt/agntos-src || true
+    '';
+    serviceConfig.RemainAfterExit = true;
   };
+
 }

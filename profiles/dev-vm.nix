@@ -16,9 +16,21 @@
     isNormalUser = true;
     initialPassword = "agntos";
     extraGroups = [ "wheel" "networkmanager" ];
+    openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB9pAb19Mwl8yl6ZBQbWlDi8eG1AcAMCoN0wOtFvY+wJ nate.e.espejo@gmail.com"
+    ];
   };
 
-  users.users.root.initialPassword = "agntos";
+  security.sudo.extraRules = [
+    { groups = [ "wheel" ]; commands = [ { command = "ALL"; options = [ "NOPASSWD" ]; } ]; }
+  ];
+
+  users.users.root = {
+    initialPassword = "agntos";
+    openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB9pAb19Mwl8yl6ZBQbWlDi8eG1AcAMCoN0wOtFvY+wJ nate.e.espejo@gmail.com"
+    ];
+  };
 
   environment.systemPackages = with pkgs; [
     git
@@ -34,7 +46,6 @@
       alias agnt-check="cd /mnt/agntos-src && cargo check"
       alias agnt-inspect="cd /mnt/agntos-src && cargo run --bin agntctl -- inspect"
       alias agnt-agent="cd /mnt/agntos-src && cargo run --bin agntd"
-      alias vbox-mount="sudo mount -t vboxsf agntos-src /mnt/agntos-src"
       export PATH="/mnt/agntos-src/target/release:$PATH"
       echo "AgntOS dev ready: agnt-build | agnt-inspect | agnt-agent"
     fi
