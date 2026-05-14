@@ -47,7 +47,7 @@ pub fn agent_turn(
     }));
 
     let mut depth = 0;
-    while depth < 6 {
+    while depth < 8 {
         depth += 1;
         let resp = runtime.block_on(
             state
@@ -300,6 +300,62 @@ fn execute_tool_call(tc: &ToolCall) -> Result<String, String> {
             }
             command_result(util::run_agntctl(&["rollback", "--config-dir", &cfg]))
         }
+        "read_file" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: path".to_string())?;
+            command_result(util::run_agntctl(&["read", path]))
+        }
+        "write_file" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: path".to_string())?;
+            let content = args
+                .get("content")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: content".to_string())?;
+            command_result(util::run_agntctl(&[
+                "write",
+                path,
+                "--content",
+                content,
+                "--config-dir",
+                &cfg,
+            ]))
+        }
+        "edit_file" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: path".to_string())?;
+            let old = args
+                .get("old_string")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: old_string".to_string())?;
+            let new = args
+                .get("new_string")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: new_string".to_string())?;
+            command_result(util::run_agntctl(&[
+                "edit",
+                path,
+                "--old",
+                old,
+                "--new",
+                new,
+                "--config-dir",
+                &cfg,
+            ]))
+        }
+        "run_bash" => {
+            let command = args
+                .get("command")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: command".to_string())?;
+            command_result(util::run_agntctl(&["bash", command, "--config-dir", &cfg]))
+        }
         other => Err(format!("Unknown tool: {}", other)),
     }
 }
@@ -323,6 +379,12 @@ fn command_result(cmd: Result<(String, String, bool), String>) -> Result<String,
             }
             if text.is_empty() {
                 text.push_str("(no output)");
+            }
+            // Truncate long results to avoid context overflow
+            const MAX_TOOL_RESULT: usize = 2000;
+            if text.len() > MAX_TOOL_RESULT {
+                text = text.chars().take(MAX_TOOL_RESULT).collect::<String>();
+                text.push_str("\n... (output truncated)");
             }
             if success {
                 Ok(text)

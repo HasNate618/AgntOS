@@ -398,3 +398,112 @@ flowchart LR
   T110 --> T112
   T102 --> T112
 ```
+
+## Phase 1 Expansion — General Tools (Pi-Inspired)
+
+### T201: Implement `agntctl read/write/edit/bash` commands
+
+Status: `[ ]`
+
+Requirements: Pi-inspired minimal primitives.
+
+What:
+Create `crates/agntctl/src/sys.rs` with four general-purpose tool implementations.
+
+Where:
+- `crates/agntctl/src/sys.rs`
+
+Done when:
+- `agntctl read <path>` prints file content to stdout.
+- `agntctl write <path> --content <text>` creates or overwrites a file.
+- `agntctl edit <path> --old <string> --new <string>` replaces text in a file.
+- `agntctl bash <command>` runs `bash -c <command>`, captures stdout/stderr.
+- Write ops (`write`, `edit`, `bash`) log to audit JSONL.
+- All commands have unit tests.
+
+### T202: Wire general tools into agntctl CLI
+
+Status: `[ ]`
+
+Requirements: T201.
+
+What:
+Add `Read`, `Write`, `Edit`, `Bash` subcommands to the `agntctl` CLI parser and dispatch handlers.
+
+Where:
+- `crates/agntctl/src/main.rs`
+
+Done when:
+- `Command::Read`, `Command::Write`, `Command::Edit`, `Command::Bash` exist.
+- Dispatch correctly calls the `sys` module functions.
+- All existing commands continue to work.
+
+### T203: Define general tools as LLM function tools
+
+Status: `[ ]`
+
+Requirements: T201, T202.
+
+What:
+Add `read_file`, `write_file`, `edit_file`, `run_bash` to the LLM tool definitions in `agntd`.
+
+Where:
+- `crates/agntd/src/llm.rs`
+
+Done when:
+- Four new tool schemas exist in `tool_definitions()`.
+- Each tool has a clear name, description, and parameter schema.
+- The system prompt is rewritten to include the new tools and Pi-inspired rules.
+
+### T204: Wire general tool execution in agent loop
+
+Status: `[ ]`
+
+Requirements: T203.
+
+What:
+Add match arms for `read_file`, `write_file`, `edit_file`, `run_bash` in the agent's tool execution dispatcher.
+
+Where:
+- `crates/agntd/src/agent.rs`
+
+Done when:
+- All four tools map to `agntctl` subprocess calls.
+- No confirmation prompts (unlike `apply`/`rollback`).
+- Tool results are formatted correctly for LLM feedback.
+
+### T205: Audit logging for write/bash tools
+
+Status: `[ ]`
+
+Requirements: T201.
+
+What:
+Log `write_file`, `edit_file`, and `run_bash` operations to the audit JSONL log.
+
+Where:
+- `crates/agntctl/src/audit.rs`
+- `crates/agntctl/src/sys.rs`
+
+Done when:
+- `write_file` logs path and content length.
+- `edit_file` logs path and old→new summary.
+- `run_bash` logs full command, exit code, and truncated output.
+- `read_file` does NOT generate audit entries.
+
+### T206: VM end-to-end verification
+
+Status: `[ ]`
+
+Requirements: T201–T205.
+
+What:
+Verify the full 10-tool agent in the QEMU VM against a real LLM endpoint.
+
+Done when:
+- All 10 tools work through `agntctl`.
+- The agent uses `read_file`, `write_file`, `edit_file`, `run_bash` naturally.
+- The agent chains propose+apply without asking "would you like me to apply?"
+- Audit log records write and bash mutations.
+- Rollback works (list + apply).
+- Auto-start service is active.

@@ -14,6 +14,7 @@ mod memory;
 mod model;
 mod propose;
 mod rollback;
+mod sys;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -152,6 +153,54 @@ enum Command {
         /// Action: list (default) or apply (perform rollback)
         #[arg(default_value = "apply")]
         action: String,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
+    },
+    /// Read a file's contents
+    Read {
+        /// File path
+        #[arg()]
+        path: String,
+    },
+    /// Create or overwrite a file
+    Write {
+        /// File path
+        #[arg()]
+        path: String,
+
+        /// Content to write
+        #[arg(long)]
+        content: String,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
+    },
+    /// Replace text in a file
+    Edit {
+        /// File path
+        #[arg()]
+        path: String,
+
+        /// String to replace
+        #[arg(long)]
+        old: String,
+
+        /// Replacement string
+        #[arg(long)]
+        new: String,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
+    },
+    /// Execute a shell command via bash -c
+    Bash {
+        /// Shell command to execute
+        #[arg()]
+        command: String,
 
         /// Config directory (default: /etc/agntos)
         #[arg(long)]
@@ -454,6 +503,46 @@ fn main() {
                 }
             }
         }
+        Command::Read { path } => match sys::execute_read(&path) {
+            Ok(content) => print!("{}", content),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Command::Write {
+            path,
+            content,
+            config_dir,
+        } => match sys::execute_write(&path, &content, config_dir.as_ref()) {
+            Ok(out) => print!("{}", out),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Command::Edit {
+            path,
+            old,
+            new,
+            config_dir,
+        } => match sys::execute_edit(&path, &old, &new, config_dir.as_ref()) {
+            Ok(out) => print!("{}", out),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Command::Bash {
+            command,
+            config_dir,
+        } => match sys::execute_bash(&command, config_dir.as_ref()) {
+            Ok(out) => print!("{}", out),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
     }
 }
 

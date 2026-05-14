@@ -121,6 +121,87 @@ pub fn log_inspect(target: &str, config_dir: Option<&PathBuf>) -> Result<(), Str
     AuditLog::append_to_disk(&log_path, &entry)
 }
 
+#[allow(dead_code)]
+pub fn log_write(path: &str, bytes: usize, config_dir: Option<&PathBuf>) {
+    let entry = AuditEntry {
+        id: audit_id(),
+        timestamp: Utc::now(),
+        action: AuditAction::Generic {
+            description: "write_file".to_string(),
+        },
+        actor: "user".to_string(),
+        summary: format!("Wrote {} ({} bytes)", path, bytes),
+        files_changed: vec![path.to_string()],
+        rollback_hint: None,
+        result: AuditResult::Success { message: None },
+    };
+    let log_path = get_log_path(config_dir);
+    let _ = AuditLog::append_to_disk(&log_path, &entry);
+}
+
+#[allow(dead_code)]
+pub fn log_edit(path: &str, old_str: &str, new_str: &str, config_dir: Option<&PathBuf>) {
+    let entry = AuditEntry {
+        id: audit_id(),
+        timestamp: Utc::now(),
+        action: AuditAction::Generic {
+            description: "edit_file".to_string(),
+        },
+        actor: "user".to_string(),
+        summary: format!(
+            "Edited {}: '{}' → '{}'",
+            path,
+            old_str.chars().take(60).collect::<String>(),
+            new_str.chars().take(60).collect::<String>(),
+        ),
+        files_changed: vec![path.to_string()],
+        rollback_hint: None,
+        result: AuditResult::Success { message: None },
+    };
+    let log_path = get_log_path(config_dir);
+    let _ = AuditLog::append_to_disk(&log_path, &entry);
+}
+
+#[allow(dead_code)]
+pub fn log_bash(
+    command: &str,
+    exit_code: i32,
+    stdout: &str,
+    stderr: &str,
+    config_dir: Option<&PathBuf>,
+) {
+    let excerpt: String = if !stdout.is_empty() {
+        stdout.chars().take(80).collect()
+    } else if !stderr.is_empty() {
+        stderr.chars().take(80).collect()
+    } else {
+        String::new()
+    };
+
+    let status = if exit_code == 0 {
+        AuditResult::Success { message: None }
+    } else {
+        AuditResult::Failed {
+            error: format!("exit {}", exit_code),
+        }
+    };
+
+    let entry = AuditEntry {
+        id: audit_id(),
+        timestamp: Utc::now(),
+        action: AuditAction::Generic {
+            description: "run_bash".to_string(),
+        },
+        actor: "user".to_string(),
+        summary: format!("bash: {} (exit {}) — {}", command, exit_code, excerpt,),
+        files_changed: Vec::new(),
+        rollback_hint: None,
+        result: status,
+    };
+    let log_path = get_log_path(config_dir);
+    let _ = AuditLog::append_to_disk(&log_path, &entry);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

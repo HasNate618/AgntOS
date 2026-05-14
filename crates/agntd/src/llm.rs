@@ -326,6 +326,65 @@ pub fn tool_definitions() -> Vec<Value> {
                 "description": "Roll back the system to the previous NixOS generation via nixos-rebuild switch --rollback. Requires confirmation."
             }
         }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "Read a file's contents.",
+                "parameters": {
+                    "type": "object",
+                    "required": ["path"],
+                    "properties": {
+                        "path": { "type": "string", "description": "Absolute file path" }
+                    }
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "write_file",
+                "description": "Create or overwrite a file with the given content.",
+                "parameters": {
+                    "type": "object",
+                    "required": ["path", "content"],
+                    "properties": {
+                        "path": { "type": "string" },
+                        "content": { "type": "string" }
+                    }
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "edit_file",
+                "description": "Replace the first occurrence of a string in a file.",
+                "parameters": {
+                    "type": "object",
+                    "required": ["path", "old_string", "new_string"],
+                    "properties": {
+                        "path": { "type": "string" },
+                        "old_string": { "type": "string" },
+                        "new_string": { "type": "string" }
+                    }
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "run_bash",
+                "description": "Execute a shell command via bash -c. Use for ls, grep, find, systemctl, journalctl, dmesg, and any command without a dedicated tool.",
+                "parameters": {
+                    "type": "object",
+                    "required": ["command"],
+                    "properties": {
+                        "command": { "type": "string" }
+                    }
+                }
+            }
+        }),
     ]
 }
 
@@ -339,12 +398,18 @@ pub fn build_system_prompt(config_dir: impl AsRef<Path>, inspect_summary: &str) 
 
     format!(
         "You are AgntOS, an OS-aware assistant for NixOS.\n\
+You inspect, configure, and debug the system through typed tools.\n\
+\n\
 Rules:\n\
-- Use tools for all system actions.\n\
-- Always propose before applying system changes.\n\
-- Applying changes or rolling back requires user confirmation.\n\
-- Keep responses concise and clear.\n\
-- Update memory when learning stable facts (hardware, preferences, known issues).\n\
+- For package/service changes, use propose FIRST, then apply. Do not\n\
+  investigate the config files manually — propose handles it.\n\
+- Do not ask permission to apply — confirmation fires automatically.\n\
+  Just chain propose→apply without pausing.\n\
+- Prefer edit_file over run_bash for modifying files.\n\
+- Use run_bash for ls, grep, find, systemctl, journalctl, dmesg,\n\
+  and any command without a dedicated tool.\n\
+- When you learn stable system facts, store them in memory.\n\
+- Explain what you are doing and why. Be concise.\n\
 \n\
 System snapshot:\n{}\n\
 \n\
@@ -352,7 +417,8 @@ MEMORY.md ({}% used):\n{}\n\
 \n\
 USER.md ({}% used):\n{}\n\
 \n\
-Available tools: inspect, propose, apply, audit, memory, rollback\n",
+Core tools (Nix):  inspect, propose, apply, rollback, audit, memory\n\
+General tools:     read_file, write_file, edit_file, run_bash\n",
         inspect_summary.trim(),
         memory.usage_percent(MemoryFile::Memory),
         if memory.memory.trim().is_empty() {
