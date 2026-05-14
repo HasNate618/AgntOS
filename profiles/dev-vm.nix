@@ -53,7 +53,6 @@
   '';
 
   system.activationScripts.ghostty-config = ''
-  system.activationScripts.ghostty-config = ''
     mkdir -p /home/developer/.config/ghostty /home/developer/.config
     ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
     grep -q 'TerminalApplication' /home/developer/.config/kdeglobals 2>/dev/null || \

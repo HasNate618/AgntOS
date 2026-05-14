@@ -1,13 +1,15 @@
-{ lib, rustPlatform, pkg-config, openssl, dbus }:
+{ lib, rustPlatform, pkg-config, openssl }:
 
 rustPlatform.buildRustPackage {
   pname = "agntctl";
   version = "0.1.0";
 
-  src = ../../crates/agntctl;
+  src = lib.cleanSource ../..;
+
+  cargoBuildFlags = [ "-p" "agntctl" ];
 
   nativeBuildInputs = [ pkg-config ];
-  buildInputs = [ openssl dbus ];
+  buildInputs = [ openssl ];
 
   cargoLock = {
     lockFile = ../../Cargo.lock;

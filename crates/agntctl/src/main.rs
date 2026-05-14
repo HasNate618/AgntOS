@@ -8,8 +8,10 @@
 //   rollback - Show or trigger rollback
 
 mod inspect;
+mod propose;
 
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "agntctl", about = "AgntOS control tool")]
@@ -32,8 +34,21 @@ enum Command {
     },
     /// Propose a Nix-backed config change
     Propose {
+        /// Description of the change (e.g. "install firefox", "enable docker")
         #[arg()]
         description: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Dry run — generate but don't save
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
     },
     /// Apply an approved proposal
     Apply {
@@ -141,10 +156,20 @@ fn main() {
                 }
             }
         }
-        Command::Propose { description } => {
-            println!("agntctl propose");
-            println!("  This will generate a Nix config diff based on: {}", description);
-            println!("  Not yet implemented.");
+        Command::Propose { description, json, dry_run, config_dir } => {
+            match propose::execute(&description, dry_run, config_dir.as_ref()) {
+                Ok(output) => {
+                    if json {
+                        println!("{{\"status\": \"ok\", \"output\": {}}}", serde_json::to_string(&output).unwrap());
+                    } else {
+                        print!("{}", output);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
         Command::Apply { id } => {
             println!("agntctl apply {}", id);

@@ -240,7 +240,7 @@ fn gpu_info() -> Vec<GpuInfo> {
 
             // Try to get a human-readable name via lspci
             let model = if !vendor_id.is_empty() && !device_id.is_empty() {
-                cmd_output(&format!("lspci -d {}:{} -mm 2>/dev/null", vendor_id.trim_start_matches("0x"), device_id.trim_start_matches("0x")))
+                cmd_output(&format!("lspci -d {}:{} -mm", vendor_id.trim_start_matches("0x"), device_id.trim_start_matches("0x")))
                     .unwrap_or_default()
             } else {
                 String::new()
@@ -258,8 +258,12 @@ fn gpu_info() -> Vec<GpuInfo> {
 
     // Fallback: try lspci
     if gpus.is_empty() {
-        if let Some(output) = cmd_output_opt("lspci -nn 2>/dev/null | grep -iE 'vga|3d|display'") {
+        if let Some(output) = cmd_output_opt("lspci -nn") {
             for line in output.lines() {
+                let lower = line.to_lowercase();
+                if !(lower.contains("vga") || lower.contains("3d") || lower.contains("display")) {
+                    continue;
+                }
                 gpus.push(GpuInfo {
                     vendor: String::new(),
                     vendor_id: String::new(),
@@ -415,23 +419,21 @@ fn find_mount(device: &str) -> Option<String> {
 }
 
 fn find_ip(iface: &str) -> Option<String> {
-    // Try /proc/net/fib_trie for IPv4
-    let fib = std::fs::read_to_string("/proc/net/fib_trie").ok()?;
-    for line in fib.lines() {
-        if line.contains(&format!("LOCAL")) && line.contains(iface) {
-            for line2 in fib.lines() {
-                if line2.contains("  +--") {
-                    let parts: Vec<&str> = line2.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        return Some(parts[1].to_string());
-                    }
-                }
+    let output = std::process::Command::new("ip")
+        .args(["-4", "addr", "show", iface])
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&output.stdout);
+    for line in s.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("inet ") {
+            let fields: Vec<&str> = trimmed.split_whitespace().collect();
+            if fields.len() >= 2 {
+                return Some(fields[1].split('/').next().unwrap_or(fields[1]).to_string());
             }
         }
     }
-
-    // Fallback: try ip addr
-    cmd_output(&format!("ip -4 addr show {} 2>/dev/null | awk '/inet /{{print $2}}'", iface))
+    None
 }
 
 fn pci_vendor_name(hex: &str) -> &'static str {
