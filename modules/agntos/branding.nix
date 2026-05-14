@@ -106,6 +106,10 @@ in {
 
   # ── Ghostty terminal ──
 
+  environment.sessionVariables = {
+    GHOSTTY_CONFIG = "/etc/xdg/ghostty/config";
+  };
+
   environment.etc."xdg/ghostty/config".text = ''
     # AgntOS default terminal configuration
     font-family = GeistMono Nerd Font
@@ -113,32 +117,32 @@ in {
     font-feature = calt
     font-feature = liga
 
-    # AgntOS color palette
+    # AgntOS color palette — warm dark theme
     background = #141416
-    foreground = #e0e0e0
+    foreground = #E2E0D8
     cursor-color = #F57C48
+    cursor-style = bar
+    cursor-style-blink = true
     selection-background = #F57C48
     selection-foreground = #141416
 
-    palette = 0=#141416
-    palette = 1=#e06c75
-    palette = 2=#98c379
-    palette = 3=#d19a66
-    palette = 4=#61afef
-    palette = 5=#c678dd
-    palette = 6=#56b6c2
-    palette = 7=#abb2bf
-    palette = 8=#5c6370
-    palette = 9=#e06c75
-    palette = 10=#98c379
-    palette = 11=#d19a66
-    palette = 12=#61afef
-    palette = 13=#c678dd
-    palette = 14=#56b6c2
-    palette = 15=#ffffff
+    palette = 0=#1E1E22
+    palette = 1=#E06B6B
+    palette = 2=#7BC97A
+    palette = 3=#E5B567
+    palette = 4=#6CB6EB
+    palette = 5=#C77DBB
+    palette = 6=#5EBFC5
+    palette = 7=#D4D2CC
+    palette = 8=#3E3E44
+    palette = 9=#FF7A7A
+    palette = 10=#8ED98D
+    palette = 11=#F0C870
+    palette = 12=#7EC4F0
+    palette = 13=#D48AC8
+    palette = 14=#6ECCD2
+    palette = 15=#F2F0EA
 
-    cursor-style = bar
-    cursor-style-blink = true
     background-opacity = 0.95
     window-padding-x = 8
     window-padding-y = 8
