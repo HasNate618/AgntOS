@@ -7,6 +7,8 @@
 //   audit    - View activity log
 //   rollback - Show or trigger rollback
 
+mod inspect;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -20,17 +22,22 @@ struct Cli {
 enum Command {
     /// Inspect system hardware and state
     Inspect {
+        /// What to inspect (system, cpu, memory, gpu, disk, network)
         #[arg(default_value = "system")]
         target: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
     /// Propose a Nix-backed config change
     Propose {
-        /// What to change
+        #[arg()]
         description: String,
     },
     /// Apply an approved proposal
     Apply {
-        /// Proposal ID to apply
+        #[arg()]
         id: String,
     },
     /// View the activity audit log
@@ -49,94 +56,118 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Inspect { target } => {
-            println!("agntctl: inspecting {}", target);
-            inspect(target);
+        Command::Inspect { target, json } => {
+            match target.as_str() {
+                "system" | "all" => {
+                    let info = inspect::SystemInfo::collect();
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&info).unwrap());
+                    } else {
+                        print!("{}", info.display());
+                    }
+                }
+                "cpu" => {
+                    let info = inspect::SystemInfo::collect();
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&info.cpu).unwrap());
+                    } else {
+                        println!("CPU:");
+                        println!("  Model:  {}", info.cpu.model);
+                        println!("  Cores:  {} physical / {} logical", info.cpu.cores, info.cpu.threads);
+                        println!("  Arch:   {}", info.cpu.arch);
+                        if let Some(ref freq) = info.cpu.max_freq {
+                            println!("  Max:    {} MHz", freq);
+                        }
+                    }
+                }
+                "memory" | "mem" => {
+                    let info = inspect::SystemInfo::collect();
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&info.memory).unwrap());
+                    } else {
+                        println!("Memory:");
+                        println!("  Total:     {}", bytes_human(info.memory.total_kb * 1024));
+                        println!("  Available: {} ({:.0}%)",
+                            bytes_human(info.memory.available_kb * 1024),
+                            info.memory.available_pct());
+                        println!("  Swap:      {} total, {} free",
+                            bytes_human(info.memory.swap_total_kb * 1024),
+                            bytes_human(info.memory.swap_free_kb * 1024));
+                    }
+                }
+                "gpu" => {
+                    let info = inspect::SystemInfo::collect();
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&info.gpu).unwrap());
+                    } else if info.gpu.is_empty() {
+                        println!("No GPU detected.");
+                    } else {
+                        println!("GPU:");
+                        for gpu in &info.gpu {
+                            let model = if gpu.model.is_empty() { &gpu.device_id } else { &gpu.model };
+                            println!("  {}: {} (driver: {})", gpu.vendor, model, gpu.driver);
+                        }
+                    }
+                }
+                "disk" | "disks" => {
+                    let info = inspect::SystemInfo::collect();
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&info.disks).unwrap());
+                    } else if info.disks.is_empty() {
+                        println!("No disks detected.");
+                    } else {
+                        println!("Disks:");
+                        for disk in &info.disks {
+                            println!("  {:<8} {:>9} {}", disk.name, bytes_human(disk.size_bytes), disk.mount.as_deref().unwrap_or(""));
+                        }
+                    }
+                }
+                "network" | "net" => {
+                    let info = inspect::SystemInfo::collect();
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&info.network).unwrap());
+                    } else if info.network.is_empty() {
+                        println!("No network interfaces detected.");
+                    } else {
+                        println!("Network:");
+                        for iface in &info.network {
+                            println!("  {:<8} {}  {}  {}", iface.name, iface.state, iface.mac, iface.ip.as_deref().unwrap_or(""));
+                        }
+                    }
+                }
+                other => {
+                    eprintln!("Unknown target: {}. Valid targets: system, cpu, memory, gpu, disk, network", other);
+                    std::process::exit(1);
+                }
+            }
         }
         Command::Propose { description } => {
-            println!("agntctl: proposing change: {}", description);
-            propose(description);
+            println!("agntctl propose");
+            println!("  This will generate a Nix config diff based on: {}", description);
+            println!("  Not yet implemented.");
         }
         Command::Apply { id } => {
-            println!("agntctl: applying proposal {}", id);
-            apply(id);
+            println!("agntctl apply {}", id);
+            println!("  Not yet implemented.");
         }
         Command::Audit { action } => {
-            println!("agntctl: audit {}", action);
-            audit(action);
+            println!("agntctl audit {}", action);
+            println!("  Not yet implemented.");
         }
         Command::Rollback { action } => {
-            println!("agntctl: rollback {}", action);
-            rollback(action);
+            println!("agntctl rollback {}", action);
+            println!("  Not yet implemented.");
         }
     }
 }
 
-fn inspect(target: String) {
-    println!("  OS: AgntOS (NixOS-based)");
-    println!("  Host: {}", hostname());
-    println!("  Kernel: {}", kernel_version());
-    println!("  CPU: {}", cpu_info());
-    println!("  Memory: {}", memory_info());
-    println!("  Target requested: {}", target);
-}
-
-fn hostname() -> String {
-    std::process::Command::new("hostname")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".into())
-}
-
-fn kernel_version() -> String {
-    std::process::Command::new("uname")
-        .arg("-r")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".into())
-}
-
-fn cpu_info() -> String {
-    std::fs::read_to_string("/proc/cpuinfo")
-        .ok()
-        .and_then(|s| {
-            s.lines()
-                .find(|l| l.starts_with("model name"))
-                .map(|l| l.split(':').nth(1).unwrap_or("unknown").trim().to_string())
-        })
-        .unwrap_or_else(|| "unknown".into())
-}
-
-fn memory_info() -> String {
-    std::fs::read_to_string("/proc/meminfo")
-        .ok()
-        .and_then(|s| {
-            s.lines()
-                .find(|l| l.starts_with("MemTotal"))
-                .map(|l| l.split(':').nth(1).unwrap_or("unknown").trim().to_string())
-        })
-        .unwrap_or_else(|| "unknown".into())
-}
-
-fn propose(description: String) {
-    println!("  This is a placeholder.");
-    println!("  In Phase 1, this will generate a Nix config diff based on: {}", description);
-    println!("  Files would be written to: /etc/agntos/");
-}
-
-fn apply(id: String) {
-    println!("  This is a placeholder.");
-    println!("  In Phase 1, this will apply proposal {} to /etc/agntos/ and trigger nixos-rebuild.", id);
-}
-
-fn audit(action: String) {
-    println!("  This is a placeholder.");
-    println!("  In Phase 1, this will read the local audit log in: /var/log/agntos/");
-    println!("  Action: {}", action);
-}
-
-fn rollback(action: String) {
-    println!("  This is a placeholder.");
-    println!("  In Phase 1, this will show nixos-rebuild rollback guidance.");
-    println!("  Action: {}", action);
+fn bytes_human(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{:.1} {}", size, UNITS[unit])
 }
