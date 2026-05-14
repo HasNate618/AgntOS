@@ -9,6 +9,8 @@
 
 mod inspect;
 mod propose;
+mod apply;
+mod audit;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -52,13 +54,43 @@ enum Command {
     },
     /// Apply an approved proposal
     Apply {
+        /// Proposal ID (from agntctl propose output)
         #[arg()]
         id: String,
+
+        /// Dry run — preview without writing files
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip nixos-rebuild after writing files
+        #[arg(long)]
+        no_rebuild: bool,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
     },
     /// View the activity audit log
     Audit {
+        /// Action: list or show <id>
         #[arg(default_value = "list")]
         action: String,
+
+        /// Audit entry ID (for "show")
+        #[arg(required = false)]
+        id: Option<String>,
+
+        /// Max entries to show (for "list")
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Config directory (default: /var/log/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
     },
     /// Show rollback guidance
     Rollback {
@@ -171,13 +203,37 @@ fn main() {
                 }
             }
         }
-        Command::Apply { id } => {
-            println!("agntctl apply {}", id);
-            println!("  Not yet implemented.");
+        Command::Apply { id, dry_run, no_rebuild, config_dir } => {
+            match apply::execute(&id, dry_run, no_rebuild, config_dir.as_ref()) {
+                Ok(output) => {
+                    print!("{}", output);
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
-        Command::Audit { action } => {
-            println!("agntctl audit {}", action);
-            println!("  Not yet implemented.");
+        Command::Audit { action, id, limit, json, config_dir } => {
+            match action.as_str() {
+                "list" => {
+                    match audit::execute_list(limit, json, config_dir.as_ref()) {
+                        Ok(output) => print!("{}", output),
+                        Err(e) => eprintln!("Error: {}", e),
+                    }
+                }
+                "show" => {
+                    let entry_id = id.as_deref().unwrap_or("show");
+                    match audit::execute_show(entry_id, json, config_dir.as_ref()) {
+                        Ok(output) => print!("{}", output),
+                        Err(e) => eprintln!("Error: {}", e),
+                    }
+                }
+                other => {
+                    eprintln!("Unknown audit action: {}. Use 'list' or 'show <id>'", other);
+                    std::process::exit(1);
+                }
+            }
         }
         Command::Rollback { action } => {
             println!("agntctl rollback {}", action);
