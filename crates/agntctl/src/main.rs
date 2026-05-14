@@ -13,6 +13,7 @@ mod inspect;
 mod memory;
 mod model;
 mod propose;
+mod rollback;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -146,10 +147,15 @@ enum Command {
         #[arg(long)]
         config_dir: Option<PathBuf>,
     },
-    /// Show rollback guidance
+    /// Roll back to the previous NixOS generation, or list generations
     Rollback {
-        #[arg(default_value = "list")]
+        /// Action: list (default) or apply (perform rollback)
+        #[arg(default_value = "apply")]
         action: String,
+
+        /// Config directory (default: /etc/agntos)
+        #[arg(long)]
+        config_dir: Option<PathBuf>,
     },
 }
 
@@ -431,9 +437,22 @@ fn main() {
                 }
             }
         }
-        Command::Rollback { action } => {
-            println!("agntctl rollback {}", action);
-            println!("  Not yet implemented.");
+        Command::Rollback { action, config_dir } => {
+            let result = match action.as_str() {
+                "list" | "list-generations" => rollback::execute_list(config_dir.as_ref()),
+                "apply" | "do" | "" => rollback::execute(config_dir.as_ref()),
+                other => Err(format!(
+                    "Unknown rollback action: {}. Use 'list' or 'apply'",
+                    other
+                )),
+            };
+            match result {
+                Ok(output) => print!("{}", output),
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }

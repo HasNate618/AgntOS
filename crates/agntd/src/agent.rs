@@ -294,6 +294,12 @@ fn execute_tool_call(tc: &ToolCall) -> Result<String, String> {
                 other => Err(format!("Unsupported memory action: {}", other)),
             }
         }
+        "rollback" => {
+            if !util::confirm("  LLM requests system rollback. Proceed?") {
+                return Ok("CANCELLED_BY_USER".to_string());
+            }
+            command_result(util::run_agntctl(&["rollback", "--config-dir", &cfg]))
+        }
         other => Err(format!("Unknown tool: {}", other)),
     }
 }

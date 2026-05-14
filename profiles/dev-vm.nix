@@ -3,7 +3,6 @@
 {
   agntos.enable = true;
   agntos.edition = "dev";
-  agntos.agent.enable = true;
   # Inside the VM the source is mounted at /mnt/agntos-src
   agntos.rebuild.flakeUri = "/mnt/agntos-src#agntos-dev-vm";
 
@@ -63,6 +62,20 @@
       printf '[General]\nTerminalApplication=ghostty\n' >> /home/developer/.config/kdeglobals
     chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals
   '';
+
+  systemd.user.services.agntd = {
+    description = "AgntOS agent daemon";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "/mnt/agntos-src/target/release/agntd";
+      Restart = "on-failure";
+      RestartSec = 5;
+      Environment = "AGNTOS_CONFIG_DIR=/etc/agntos";
+      StandardOutput = "journal";
+      StandardError = "journal";
+    };
+  };
 
   system.stateVersion = "24.11";
 }

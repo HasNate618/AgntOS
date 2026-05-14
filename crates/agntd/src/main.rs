@@ -226,6 +226,7 @@ fn show_help(llm_state: &Option<(tokio::runtime::Runtime, LlmSession)>) {
     println!("  apply <id>             Apply an approved proposal");
     println!("  audit                  Show recent audit log");
     println!("  audit show <id>        Show audit entry details");
+    println!("  rollback               Roll back to previous NixOS generation");
     println!("  history <query>        Search prior conversation turns");
     println!("  help | ?               Show this help");
     println!("  quit | exit | bye      Exit");
@@ -250,6 +251,8 @@ fn handle_keyword_fallback(lower: &str) {
         handle_apply(lower);
     } else if lower == "audit" || lower.starts_with("audit ") {
         handle_audit(lower);
+    } else if lower == "rollback" || lower.starts_with("rollback ") {
+        handle_rollback(lower);
     } else {
         println!("  Unknown command. Type 'help' for available commands.");
         println!("  Tip: configure /etc/agntos/models.toml for LLM-powered interaction.");
@@ -407,6 +410,32 @@ fn handle_audit(lower: &str) {
             }
         }
         _ => println!("  Usage: audit [list|show <id>]"),
+    }
+}
+
+fn handle_rollback(lower: &str) {
+    let parts: Vec<&str> = lower.split_whitespace().collect();
+    let action = parts.get(1).copied().unwrap_or("apply");
+    let cfg = util::config_dir_str();
+
+    match action {
+        "list" | "list-generations" => {
+            match util::run_agntctl(&["rollback", "list", "--config-dir", &cfg]) {
+                Ok((stdout, stderr, success)) => util::print_output(&stdout, &stderr, success),
+                Err(e) => println!("  Error: {}", e),
+            }
+        }
+        "apply" => {
+            if !util::confirm("  Roll back to previous NixOS generation?") {
+                println!("  Cancelled.");
+                return;
+            }
+            match util::run_agntctl(&["rollback", "apply", "--config-dir", &cfg]) {
+                Ok((stdout, stderr, success)) => util::print_output(&stdout, &stderr, success),
+                Err(e) => println!("  Error: {}", e),
+            }
+        }
+        _ => println!("  Usage: rollback [list|apply]"),
     }
 }
 

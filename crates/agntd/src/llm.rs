@@ -319,6 +319,13 @@ pub fn tool_definitions() -> Vec<Value> {
                 }
             }
         }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "rollback",
+                "description": "Roll back the system to the previous NixOS generation via nixos-rebuild switch --rollback. Requires confirmation."
+            }
+        }),
     ]
 }
 
@@ -335,7 +342,7 @@ pub fn build_system_prompt(config_dir: impl AsRef<Path>, inspect_summary: &str) 
 Rules:\n\
 - Use tools for all system actions.\n\
 - Always propose before applying system changes.\n\
-- Applying changes requires user confirmation.\n\
+- Applying changes or rolling back requires user confirmation.\n\
 - Keep responses concise and clear.\n\
 - Update memory when learning stable facts (hardware, preferences, known issues).\n\
 \n\
@@ -343,7 +350,9 @@ System snapshot:\n{}\n\
 \n\
 MEMORY.md ({}% used):\n{}\n\
 \n\
-USER.md ({}% used):\n{}\n",
+USER.md ({}% used):\n{}\n\
+\n\
+Available tools: inspect, propose, apply, audit, memory, rollback\n",
         inspect_summary.trim(),
         memory.usage_percent(MemoryFile::Memory),
         if memory.memory.trim().is_empty() {
