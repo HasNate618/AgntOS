@@ -59,6 +59,7 @@ in {
     [General]
     ColorScheme=BreezeDark
     widgetStyle=Breeze
+    TerminalApplication=ghostty
     [KDE]
     LookAndFeelPackage=org.kde.breezedark.desktop
     [Icons]
@@ -103,11 +104,52 @@ in {
     monospace = [ "GeistMono Nerd Font" ];
   };
 
+  # ── Ghostty terminal ──
+
+  environment.etc."xdg/ghostty/config".text = ''
+    # AgntOS default terminal configuration
+    font-family = GeistMono Nerd Font
+    font-size = 11
+    font-feature = calt
+    font-feature = liga
+
+    # AgntOS color palette
+    background = #141416
+    foreground = #e0e0e0
+    cursor-color = #F57C48
+    selection-background = #F57C48
+    selection-foreground = #141416
+
+    palette = 0=#141416
+    palette = 1=#e06c75
+    palette = 2=#98c379
+    palette = 3=#d19a66
+    palette = 4=#61afef
+    palette = 5=#c678dd
+    palette = 6=#56b6c2
+    palette = 7=#abb2bf
+    palette = 8=#5c6370
+    palette = 9=#e06c75
+    palette = 10=#98c379
+    palette = 11=#d19a66
+    palette = 12=#61afef
+    palette = 13=#c678dd
+    palette = 14=#56b6c2
+    palette = 15=#ffffff
+
+    cursor-style = bar
+    cursor-style-blink = true
+    background-opacity = 0.95
+    window-padding-x = 8
+    window-padding-y = 8
+  '';
+
   # ── System packages ──
 
   environment.systemPackages = with pkgs; [
     agntos-branding
     fastfetch
+    ghostty
   ];
 
 }
