@@ -94,34 +94,28 @@ check "agntctl audit list" \
 echo ""
 echo "--- Socket/daemon mode ---"
 
-if command -v socat &>/dev/null; then
-  SOCK="/tmp/agntd-eval.sock"
-  # Start agntd in socket mode, background, wait for socket
-  sudo AGNTOS_CONFIG_DIR=/etc/agntos timeout 30 ./target/release/agntd --socket "$SOCK" &
-  AGNTD_PID=$!
-  # Wait for socket to appear
-  for i in $(seq 1 10); do
-    [ -S "$SOCK" ] && break
-    sleep 0.5
-  done
+SOCK="/tmp/agntd-eval.sock"
+sudo AGNTOS_CONFIG_DIR=/etc/agntos timeout 30 ./target/release/agntd --socket "$SOCK" >/dev/null 2>&1 &
+AGNTD_PID=$!
 
-  if [ -S "$SOCK" ]; then
-    # Send a prompt via socat
-    RESP=$(echo '{"prompt":"inspect system briefly"}' | socat - UNIX-CONNECT:"$SOCK" 2>/dev/null || echo '{"error":"socat failed"}')
-    if echo "$RESP" | grep -q '"response"'; then
-      ok "agntd socket mode processes prompt"
-    else
-      fail "agntd socket mode: unexpected response: $(echo "$RESP" | head -c 100)"
-    fi
-    kill "$AGNTD_PID" 2>/dev/null || true
-    wait "$AGNTD_PID" 2>/dev/null || true
-    rm -f "$SOCK"
+for i in $(seq 1 10); do
+  [ -S "$SOCK" ] && break
+  sleep 0.5
+done
+
+if [ -S "$SOCK" ]; then
+  RESP=$(printf '{"prompt":"say hello in one word"}' | timeout 10 sudo nc -U -N "$SOCK" 2>/dev/null)
+  if echo "$RESP" | grep -q '"response"'; then
+    ok "agntd socket mode processes prompt"
   else
-    fail "agntd socket did not appear within 5s"
-    kill "$AGNTD_PID" 2>/dev/null || true
+    fail "agntd socket mode: unexpected: $(echo "$RESP" | head -c 100)"
   fi
+  kill "$AGNTD_PID" 2>/dev/null || true
+  wait "$AGNTD_PID" 2>/dev/null || true
+  rm -f "$SOCK"
 else
-  echo "  ~ socat not installed, skipping socket test"
+  fail "agntd socket did not appear within 5s"
+  kill "$AGNTD_PID" 2>/dev/null || true
 fi
 
 # ── Rollback friendly errors ────────────────────────────────────────────
