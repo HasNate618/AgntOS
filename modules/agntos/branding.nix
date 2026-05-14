@@ -85,6 +85,13 @@ in {
     useCustomStyle=true
   '';
 
+  # Lock screen wallpaper
+  environment.etc."xdg/kscreenlockerrc".text = ''
+    [Greeter][Wallpaper][org.kde.image][General]
+    Image=file://${wallpaperPath}
+    FillMode=2
+  '';
+
   # ── Fonts ──
 
   fonts.packages = with pkgs; [
