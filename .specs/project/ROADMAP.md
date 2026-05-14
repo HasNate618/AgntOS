@@ -18,24 +18,71 @@ Exit criteria:
 - Developer can build a VM from the repo.
 - VM uses AgntOS NixOS modules rather than manual post-install setup.
 
+Status: Complete.
+
 ## Phase 1: Agent OS Foundation
 
-Goal: boot into AgntOS and interact with a Hermes-like OS-aware agent.
+Goal: boot into AgntOS and interact with an LLM-powered agent that has persistent memory and safe OS tool access.
 
-Deliverables:
-- `agntd` daemon skeleton.
-- `agntctl` CLI skeleton.
-- NixOS service modules.
-- Structured OS tool interface: inspect, propose, apply, audit, rollback.
-- First skills: inspect hardware, inspect services/logs, propose Nix config change.
-- Activity log format.
-- Approval flow concept.
+### Phase 1 Architecture
 
-Exit criteria:
-- User can ask the agent about system state.
-- User can request a simple OS change.
-- `agntctl` can make or stage a Nix config edit.
-- Changes are auditable.
+```
+User ↔ agntd (llm-powered agent)
+             ↕  tools: inspect, propose, apply, audit, memory
+        agntctl (os control layer)
+             ↕  writes Nix config
+        /etc/agntos/ (Nix config tree)
+             ↕  nixos-rebuild
+        NixOS system
+             ↑
+        Agent memory (MEMORY.md + USER.md, always in context)
+```
+
+### Deliverables
+
+**Model Routing Config:**
+- TOML config at `/etc/agntos/models.toml`
+- Model profiles: endpoint, model name, API key (from env), max_tokens, temperature
+- Task-class routing: inspect / propose / apply / chat / memory each map to a profile
+- `agntctl model list` and `agntctl model route <task>` subcommands
+- No default endpoint — user must configure their own (localhost:8081 is an example, not built-in)
+
+**Hermes-Style Memory System:**
+- Two core memory files: `MEMORY.md` (system facts, < 2,200 chars) and `USER.md` (preferences, < 1,375 chars)
+- Loaded as frozen snapshot into every system prompt — always in context
+- Agent updates memory via `memory` tool (add/replace/remove)
+- Security scanning: prompt injection, credential exfiltration, invisible Unicode
+- Capacity management: >80% full triggers consolidation, 100% returns error
+- Session search: SQLite FTS5 for historical queries (on-demand, not in-prompt)
+- `agntctl memory` subcommand for users
+
+**LLM-Powered Agent (agntd rewrite):**
+- Replace keyword-matching REPL with OpenAI-compatible `/v1/chat/completions` integration
+- Tool definitions: inspect, propose, apply, audit, memory as typed functions
+- System prompt built from: memory snapshot + system profile + tool definitions + rules
+- Stream responses if the LLM supports it
+- Confirmation flow for `apply` and destructive operations
+- Session persistence: save conversation turns to session store
+
+**Tool Definitions (exposed to LLM):**
+
+| Tool | Purpose | Safety |
+|---|---|---|
+| `inspect(target)` | Read system state | No confirmation needed |
+| `propose(description)` | Stage a Nix config change | No confirmation needed |
+| `apply(proposal_id)` | Apply staged change | Requires user confirmation |
+| `audit(action, ...)` | View change history | No confirmation needed |
+| `memory(action, ...)` | Update persistent memory | No confirmation needed |
+
+### Exit Criteria
+
+- User can configure model endpoints in `/etc/agntos/models.toml` (no hardcoded defaults).
+- The agent can inspect the system, propose a change, get confirmation, and apply it.
+- The agent remembers system state between sessions (e.g. "what GPU did you say I have?").
+- The agent can store and retrieve facts about the system.
+- Every OS mutation is recorded in the audit log.
+- All changes are Nix-backed and rollback-capable.
+- The stack works end-to-end in the dev VM.
 
 ## Phase 2: Model Management And Routing
 
