@@ -2,19 +2,15 @@
 
 {
   config = lib.mkIf config.agntos.enable {
-    services.xserver = {
+    services.displayManager.sddm = {
       enable = true;
-      displayManager.sddm = {
-        enable = true;
-        wayland.enable = true;
-      };
-      desktopManager.plasma6.enable = true;
+      wayland.enable = true;
     };
+    services.desktopManager.plasma6.enable = true;
+    services.xserver.enable = true;
 
-    # Wayland session
     programs.dconf.enable = true;
 
-    # Useful Plasma packages
     environment.systemPackages = with pkgs; [
       konsole
       dolphin

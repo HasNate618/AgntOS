@@ -1,6 +1,10 @@
-# AgntOS Dev VM (VirtualBox)
+# AgntOS Dev VM (VirtualBox) — Legacy
 
-## Setup
+> **Note:** VirtualBox is the previous approach. The recommended dev workflow now uses the **QEMU flake VM**:
+> `nix build .#agntos-dev-vm` then `./result/bin/run-agntos-dev-vm`.
+> See the README for details.
+
+This doc is kept for reference if QEMU is unavailable.
 
 ### 1. Download NixOS ISO
 

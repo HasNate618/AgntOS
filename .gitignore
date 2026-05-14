@@ -5,6 +5,12 @@
 # Rust build outputs
 /target
 
+# VM disk images
+*.qcow2
+*.vdi
+*.raw
+*.img
+
 # Local environment
 .direnv/
 .env
