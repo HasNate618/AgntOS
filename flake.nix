@@ -38,6 +38,7 @@
       agntctl = pkgs.callPackage ./pkgs/agntctl { };
       agntd = pkgs.callPackage ./pkgs/agntd { };
       agntos-branding = pkgs.callPackage ./pkgs/agntos-branding { };
+      agntos-fonts = pkgs.callPackage ./pkgs/agntos-fonts { };
     };
   };
 }

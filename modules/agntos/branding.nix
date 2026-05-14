@@ -96,6 +96,7 @@ in {
 
   fonts.packages = with pkgs; [
     (nerdfonts.override { fonts = [ "GeistMono" ]; })
+    (callPackage ../../pkgs/agntos-fonts { })
   ];
 
   fonts.fontconfig.defaultFonts = {
