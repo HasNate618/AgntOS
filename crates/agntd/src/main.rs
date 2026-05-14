@@ -23,12 +23,12 @@ fn find_agntctl() -> String {
         }
     }
 
-    // Dev paths relative to repository root
+    // Dev paths relative to repository root (prefer release)
     let dev_paths = [
-        "target/debug/agntctl",
         "target/release/agntctl",
-        "../target/debug/agntctl",
         "../target/release/agntctl",
+        "target/debug/agntctl",
+        "../target/debug/agntctl",
     ];
 
     for p in &dev_paths {

@@ -14,6 +14,9 @@ in {
     diskSize = 40960;
     cores = 4;
     graphics = true;
+    forwardPorts = [
+      { from = "host"; host.port = 2222; guest.port = 22; }
+    ];
     qemu.options = lib.optionals hasSrc [
       "-virtfs local,path=${projectRoot},mount_tag=agntos-source,security_model=none"
     ];
