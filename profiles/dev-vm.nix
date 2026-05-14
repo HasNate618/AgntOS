@@ -46,8 +46,9 @@
       alias agnt-check="cd /mnt/agntos-src && cargo check"
       alias agnt-inspect="cd /mnt/agntos-src && cargo run --bin agntctl -- inspect"
       alias agnt-agent="cd /mnt/agntos-src && cargo run --bin agntd"
+      alias agnt-fetch="fastfetch --config /etc/agntos/fastfetch-config.jsonc"
       export PATH="/mnt/agntos-src/target/release:$PATH"
-      echo "AgntOS dev ready: agnt-build | agnt-inspect | agnt-agent"
+      echo "AgntOS dev ready: agnt-build | agnt-inspect | agnt-fetch"
     fi
   '';
 

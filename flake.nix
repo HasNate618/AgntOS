@@ -13,6 +13,7 @@
       system = "x86_64-linux";
       modules = [
         ./modules/agntos/base.nix
+        ./modules/agntos/branding.nix
         ./modules/agntos/desktop-plasma.nix
         ./modules/agntos/vm.nix
         ./profiles/dev-vm.nix
@@ -24,6 +25,7 @@
       system = "x86_64-linux";
       modules = [
         ./modules/agntos/base.nix
+        ./modules/agntos/branding.nix
         ./modules/agntos/desktop-plasma.nix
         ./profiles/plasma.nix
       ];
@@ -35,6 +37,7 @@
     in {
       agntctl = pkgs.callPackage ./pkgs/agntctl { };
       agntd = pkgs.callPackage ./pkgs/agntd { };
+      agntos-branding = pkgs.callPackage ./pkgs/agntos-branding { };
     };
   };
 }
