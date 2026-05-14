@@ -1,8 +1,7 @@
 { config, pkgs, lib, ... }:
 
 let
-  agntosBranding = pkgs.callPackage ../../pkgs/agntos-branding { };
-  wallpaperPath = "${agntosBranding}/share/wallpapers/agntos/default.png";
+  wallpaperPath = "${pkgs.agntos-branding}/share/wallpapers/agntos/default.png";
 in {
 
   # ── Distro identity ──
@@ -22,13 +21,13 @@ in {
       ANSI_COLOR="38;2;245;124;72"
     '';
 
-    "agntos/logo.txt".source = "${agntosBranding}/share/agntos/logo.txt";
+    "agntos/logo.txt".source = "${pkgs.agntos-branding}/share/agntos/logo.txt";
     "agntos/fastfetch-config.jsonc".source =
-      "${agntosBranding}/share/agntos/fastfetch-config.jsonc";
+      "${pkgs.agntos-branding}/share/agntos/fastfetch-config.jsonc";
 
     # Make it the system-wide default so `fastfetch` uses it automatically
     "fastfetch/config.jsonc".source =
-      "${agntosBranding}/share/agntos/fastfetch-config.jsonc";
+      "${pkgs.agntos-branding}/share/agntos/fastfetch-config.jsonc";
   };
 
   # ── Hostname ──
@@ -96,7 +95,7 @@ in {
 
   fonts.packages = with pkgs; [
     (nerdfonts.override { fonts = [ "GeistMono" ]; })
-    (callPackage ../../pkgs/agntos-fonts { })
+    agntos-fonts
   ];
 
   fonts.fontconfig.defaultFonts = {
@@ -107,7 +106,7 @@ in {
   # ── System packages ──
 
   environment.systemPackages = with pkgs; [
-    agntosBranding
+    agntos-branding
     fastfetch
   ];
 

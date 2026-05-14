@@ -6,7 +6,12 @@
   };
 
   outputs = { self, nixpkgs, ... }: let
-    pkgsFor = system: import nixpkgs { inherit system; };
+    agntosOverlay = final: prev: {
+      agntctl = final.callPackage ./pkgs/agntctl { };
+      agntd = final.callPackage ./pkgs/agntd { };
+      agntos-branding = final.callPackage ./pkgs/agntos-branding { };
+      agntos-fonts = final.callPackage ./pkgs/agntos-fonts { };
+    };
   in {
     # --- Dev VM ---
     nixosConfigurations.agntos-dev-vm = nixpkgs.lib.nixosSystem {
@@ -17,6 +22,7 @@
         ./modules/agntos/desktop-plasma.nix
         ./modules/agntos/vm.nix
         ./profiles/dev-vm.nix
+        ({ ... }: { nixpkgs.overlays = [ agntosOverlay ]; })
       ];
     };
 
@@ -28,17 +34,18 @@
         ./modules/agntos/branding.nix
         ./modules/agntos/desktop-plasma.nix
         ./profiles/plasma.nix
+        ({ ... }: { nixpkgs.overlays = [ agntosOverlay ]; })
       ];
     };
 
     # --- Packages ---
     packages.x86_64-linux = let
-      pkgs = pkgsFor "x86_64-linux";
+      pkgs = import nixpkgs {
+        system = "x86_64-linux";
+        overlays = [ agntosOverlay ];
+      };
     in {
-      agntctl = pkgs.callPackage ./pkgs/agntctl { };
-      agntd = pkgs.callPackage ./pkgs/agntd { };
-      agntos-branding = pkgs.callPackage ./pkgs/agntos-branding { };
-      agntos-fonts = pkgs.callPackage ./pkgs/agntos-fonts { };
+      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts;
     };
   };
 }
