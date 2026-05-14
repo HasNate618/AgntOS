@@ -36,12 +36,31 @@ mod session;
 mod util;
 
 use agent::LlmSession;
+use serde_json::json;
 use session::SessionStore;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
+use std::os::unix::net::UnixListener;
+use std::path::Path;
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    match args.get(1).map(|s| s.as_str()) {
+        Some("--socket") | Some("-s") => {
+            let path = args
+                .get(2)
+                .map(|s| s.as_str())
+                .unwrap_or("/run/agntd/agent.sock");
+            run_socket_mode(path);
+        }
+        _ => run_repl(),
+    }
+}
+
+/// Runs the REPL — interactive mode (original behaviour).
+fn run_repl() {
     print_banner();
 
     let mut llm_state = init_llm_session();
@@ -65,7 +84,6 @@ fn main() {
 
         let lower = input.to_lowercase();
 
-        // ── Always-local commands ──────────────────────────────────────────
         match lower.as_str() {
             "quit" | "exit" | "bye" => {
                 println!("bye.");
@@ -78,7 +96,6 @@ fn main() {
             _ => {}
         }
 
-        // ── Session-store commands (require LLM session) ───────────────────
         if lower.starts_with("history ") {
             if let Some((runtime, state)) = llm_state.as_mut() {
                 let _ = agent::agent_turn(&input, runtime, state);
@@ -88,7 +105,6 @@ fn main() {
             continue;
         }
 
-        // ── Primary path: LLM agent ────────────────────────────────────────
         if let Some((runtime, state)) = llm_state.as_mut() {
             if let Err(e) = agent::agent_turn(&input, runtime, state) {
                 println!("  Agent error: {}", e);
@@ -96,8 +112,70 @@ fn main() {
             continue;
         }
 
-        // ── Fallback: keyword matching ─────────────────────────────────────
         handle_keyword_fallback(&lower);
+    }
+}
+
+/// Runs the socket / daemon mode — listens on a Unix domain socket for one-shot
+/// JSON requests.  Each connection reads a `{"prompt": "..."}` and returns
+/// `{"response": "..."}` or `{"error": "..."}`.
+fn run_socket_mode(socket_path: &str) {
+    // Ensure parent directory exists
+    if let Some(parent) = Path::new(socket_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let _ = std::fs::remove_file(socket_path);
+    let listener = match UnixListener::bind(socket_path) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("agntd: failed to bind socket at {}: {}", socket_path, e);
+            std::process::exit(1);
+        }
+    };
+
+    let bootstrap = match agent::DaemonBootstrap::from_config_dir(&util::config_dir_str()) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("agntd: failed to initialise: {}", e);
+            let _ = std::fs::remove_file(socket_path);
+            std::process::exit(1);
+        }
+    };
+
+    println!(
+        "agntd: listening on {} (profile={}, model={})",
+        socket_path, bootstrap.client.profile_name, bootstrap.client.profile.model
+    );
+
+    for stream in listener.incoming() {
+        let mut stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("agntd: connection error: {}", e);
+                continue;
+            }
+        };
+
+        let mut buf = String::new();
+        if let Err(e) = stream.read_to_string(&mut buf) {
+            eprintln!("agntd: read error: {}", e);
+            continue;
+        }
+
+        let response = match serde_json::from_str::<serde_json::Value>(&buf) {
+            Ok(req) => match req.get("prompt").and_then(|v| v.as_str()) {
+                Some(prompt) => match agent::process_prompt(prompt, &bootstrap) {
+                    Ok(text) => json!({"response": text}),
+                    Err(e) => json!({"error": e}),
+                },
+                None => json!({"error": "Missing 'prompt' field"}),
+            },
+            Err(_) => json!({"error": "Invalid JSON"}),
+        };
+
+        let payload = response.to_string();
+        let _ = stream.write_all(payload.as_bytes());
     }
 }
 
@@ -114,7 +192,7 @@ fn init_llm_session() -> Option<(tokio::runtime::Runtime, LlmSession)> {
     let session_store = SessionStore::from_config_dir(&cfg).ok()?;
     let session_id = SessionStore::new_session_id();
     let inspect_summary = util::capture_inspect("system");
-    let _ = seed_memory_if_empty(&cfg, &inspect_summary);
+    let _ = agent::seed_memory_if_empty(&cfg, &inspect_summary);
     let system_prompt = llm::build_system_prompt(&cfg, &inspect_summary);
     let system_prompt = inject_prior_context(&system_prompt, &session_store, 8);
 
@@ -130,35 +208,6 @@ fn init_llm_session() -> Option<(tokio::runtime::Runtime, LlmSession)> {
     };
 
     Some((runtime, state))
-}
-
-/// Seeds `MEMORY.md` with a compact system snapshot on first run.
-/// Does nothing if memory already contains data.
-fn seed_memory_if_empty(config_dir: &str, inspect_summary: &str) -> Result<(), String> {
-    let mut mem = agnt_common::memory::CoreMemory::load(config_dir)?;
-    if !mem.memory.trim().is_empty() {
-        return Ok(());
-    }
-
-    let compact = inspect_summary
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .take(8)
-        .collect::<Vec<_>>()
-        .join(" | ");
-
-    if compact.is_empty() {
-        return Ok(());
-    }
-
-    let seeded = if compact.chars().count() > 280 {
-        format!("{}...", compact.chars().take(277).collect::<String>())
-    } else {
-        compact
-    };
-
-    mem.add(agnt_common::memory::MemoryFile::Memory, "System", &seeded)
 }
 
 /// Reads the most recent session turns and appends a compact summary to the

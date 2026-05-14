@@ -403,7 +403,7 @@ flowchart LR
 
 ### T201: Implement `agntctl read/write/edit/bash` commands
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: Pi-inspired minimal primitives.
 
@@ -423,7 +423,7 @@ Done when:
 
 ### T202: Wire general tools into agntctl CLI
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T201.
 
@@ -440,7 +440,7 @@ Done when:
 
 ### T203: Define general tools as LLM function tools
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T201, T202.
 
@@ -457,7 +457,7 @@ Done when:
 
 ### T204: Wire general tool execution in agent loop
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T203.
 
@@ -474,7 +474,7 @@ Done when:
 
 ### T205: Audit logging for write/bash tools
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T201.
 
@@ -493,7 +493,7 @@ Done when:
 
 ### T206: VM end-to-end verification
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T201–T205.
 
@@ -507,3 +507,65 @@ Done when:
 - Audit log records write and bash mutations.
 - Rollback works (list + apply).
 - Auto-start service is active.
+
+## Phase 1 Expansion — Daemon Mode & Error Handling
+
+### T207: Socket/daemon mode for agntd
+
+Status: `[x]`
+
+Requirements: Systemd autostart compatibility.
+
+What:
+Add `--socket <path>` mode to `agntd` that listens on a Unix domain socket for
+one-shot JSON requests instead of running a terminal REPL.
+
+Where:
+- `crates/agntd/src/main.rs`
+- `crates/agntd/src/agent.rs`
+
+Done when:
+- `agntd --socket /run/agntd/agent.sock` starts and listens for connections.
+- Each connection reads `{"prompt": "..."}` and returns `{"response": "..."}`.
+- The agent loop executes tools and returns the final response text (no printing).
+- Confirmation-gated tools (apply, rollback) safely cancel when stdin is not a TTY.
+- The systemd user service uses `--socket` mode.
+
+### T208: Rollback transient VM error handling
+
+Status: `[x]`
+
+Requirements: Friendly errors on fresh/transient systems.
+
+What:
+Catch `No profile 'system' found` and `no profile version older than the current`
+errors from `nixos-rebuild list-generations` and `nixos-rebuild switch --rollback`,
+returning user-friendly messages instead of raw nix errors.
+
+Where:
+- `crates/agntctl/src/rollback.rs`
+
+Done when:
+- `agntctl rollback list` on a fresh system says "No NixOS generations found."
+- `agntctl rollback apply` on a fresh system says "No older NixOS generation."
+- Raw nix command errors still propagate for other failure modes.
+
+### T209: Eval runbook script
+
+Status: `[x]`
+
+Requirements: Reproducible verification of the full 10-tool stack.
+
+What:
+Create a bash runbook at `.specs/features/agntos-foundation/eval-runbook.sh` that
+exercises all 10 tools via `agntctl` and the socket-mode `agntd`.
+
+Where:
+- `.specs/features/agntos-foundation/eval-runbook.sh`
+
+Done when:
+- Script passes all general tool checks (read, write, edit, bash).
+- Script passes all OS-native tool checks (inspect, propose, audit, memory).
+- Script validates socket-mode agntd with a real prompt.
+- Script validates rollback friendly errors on transient systems.
+

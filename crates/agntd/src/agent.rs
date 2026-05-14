@@ -8,6 +8,12 @@
 //!    confirmation for the `apply` tool).  Tool results are fed back as `"tool"` messages
 //!    and the loop repeats up to a depth limit.
 //! 4. When the LLM returns a plain text response it is printed and the turn ends.
+//!
+//! ## Socket / daemon mode
+//! When `agntd` is started with `--socket <path>` it listens on a Unix domain socket
+//! for one-shot JSON requests instead of running a REPL.  Each connection sends a
+//! `{"prompt": "..."}` and receives a `{"response": "..."}` JSON reply.  The daemon
+//! shares the same agent loop but creates a fresh conversation per request.
 
 use crate::llm::{LlmClient, ToolCall};
 use crate::session::SessionStore;
@@ -21,6 +27,88 @@ pub struct LlmSession {
     pub tools: Vec<Value>,
     pub session_store: SessionStore,
     pub session_id: String,
+}
+
+// ── Daemon / Socket mode ───────────────────────────────────────────────────
+
+/// Shared state held by the socket-mode daemon, reused across connections.
+pub struct DaemonBootstrap {
+    pub runtime: tokio::runtime::Runtime,
+    pub client: LlmClient,
+    pub tools: Vec<Value>,
+    pub session_store: SessionStore,
+}
+
+impl DaemonBootstrap {
+    /// Creates a bootstrap from the config directory, loading the LLM client,
+    /// session store, and tool definitions. Seeds memory if empty.
+    pub fn from_config_dir(config_dir: &str) -> Result<Self, String> {
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| format!("Failed to create runtime: {}", e))?;
+        let client = LlmClient::from_config(config_dir, "chat")?;
+        let session_store = SessionStore::from_config_dir(config_dir)?;
+        let tools = crate::llm::tool_definitions();
+        let inspect_summary = util::capture_inspect("system");
+        let _ = seed_memory_if_empty(config_dir, &inspect_summary);
+        Ok(Self {
+            runtime,
+            client,
+            tools,
+            session_store,
+        })
+    }
+}
+
+/// Processes one prompt through the LLM tool-calling loop and returns the
+/// final response text.  Unlike the REPL [`agent_turn`], this does NOT print
+/// output or accumulate messages across calls — it is a stateless one-shot.
+///
+/// Confirmation-gated tools (`apply`, `rollback`) will be cancelled when
+/// stdin is not a terminal (as is the case in socket mode), because the
+/// underlying `util::confirm()` reads from stdin and returns `false` on EOF.
+pub fn process_prompt(input: &str, bootstrap: &DaemonBootstrap) -> Result<String, String> {
+    let inspect_summary = util::capture_inspect("system");
+    let system_prompt = crate::llm::build_system_prompt(&util::config_dir_str(), &inspect_summary);
+    let mut messages: Vec<Value> = vec![
+        json!({"role": "system", "content": system_prompt}),
+        json!({"role": "user", "content": input}),
+    ];
+
+    let mut depth = 0;
+    while depth < 8 {
+        depth += 1;
+        let resp = bootstrap
+            .runtime
+            .block_on(bootstrap.client.complete(&messages, &bootstrap.tools))?;
+        messages.push(resp.assistant_message.clone());
+
+        if resp.tool_calls.is_empty() {
+            let content = resp.content;
+            // Persist
+            let sid = SessionStore::new_session_id();
+            let _ = bootstrap
+                .session_store
+                .append_turn(&sid, "user", input, None);
+            let _ = bootstrap
+                .session_store
+                .append_turn(&sid, "assistant", &content, None);
+            return Ok(content);
+        }
+
+        for tc in &resp.tool_calls {
+            let result = match execute_tool_call(tc) {
+                Ok(s) => s,
+                Err(e) => format!("TOOL_ERROR: {}", e),
+            };
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": result,
+            }));
+        }
+    }
+
+    Err("Tool-call depth limit reached".to_string())
 }
 
 /// Processes one user input through the LLM tool-calling loop.
@@ -394,6 +482,35 @@ fn command_result(cmd: Result<(String, String, bool), String>) -> Result<String,
         }
         Err(e) => Err(e),
     }
+}
+
+/// Seeds `MEMORY.md` with a compact system snapshot on first run.
+/// Does nothing if memory already contains data.
+pub fn seed_memory_if_empty(config_dir: &str, inspect_summary: &str) -> Result<(), String> {
+    let mut mem = agnt_common::memory::CoreMemory::load(config_dir)?;
+    if !mem.memory.trim().is_empty() {
+        return Ok(());
+    }
+
+    let compact = inspect_summary
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .take(8)
+        .collect::<Vec<_>>()
+        .join(" | ");
+
+    if compact.is_empty() {
+        return Ok(());
+    }
+
+    let seeded = if compact.chars().count() > 280 {
+        format!("{}...", compact.chars().take(277).collect::<String>())
+    } else {
+        compact
+    };
+
+    mem.add(agnt_common::memory::MemoryFile::Memory, "System", &seeded)
 }
 
 /// Searches the local FTS5 session store and prints matching turns.

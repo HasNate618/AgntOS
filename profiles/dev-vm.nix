@@ -68,7 +68,8 @@
     wantedBy = [ "default.target" ];
     serviceConfig = {
       Type = "simple";
-      ExecStart = "/mnt/agntos-src/target/release/agntd";
+      ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /run/agntd";
+      ExecStart = "/mnt/agntos-src/target/release/agntd --socket /run/agntd/agent.sock";
       Restart = "on-failure";
       RestartSec = 5;
       Environment = "AGNTOS_CONFIG_DIR=/etc/agntos";

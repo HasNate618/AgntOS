@@ -65,6 +65,16 @@ pub fn execute_list(config_dir: Option<&PathBuf>) -> Result<String, String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("No profile")
+            || stderr.contains("no profile")
+            || stderr.contains("does not refer to an existing generation")
+        {
+            return Ok(
+                "No NixOS generations found. This is expected on a fresh system — \
+there are no prior configurations to list."
+                    .to_string(),
+            );
+        }
         return Err(format!("nixos-rebuild returned an error:\n{}", stderr));
     }
 
@@ -89,6 +99,13 @@ pub fn execute(config_dir: Option<&PathBuf>) -> Result<String, String> {
 
     if !output.status.success() {
         let _ = log_rollback(Err(stderr.clone()), &dir);
+        if stderr.contains("no profile version older")
+            || stderr.contains("does not refer to an existing generation")
+        {
+            return Err("No older NixOS generation to roll back to. \
+This is expected on a fresh system."
+                .to_string());
+        }
         return Err(format!(
             "Rollback failed:\n{}",
             if !stderr.is_empty() { &stderr } else { &stdout }
