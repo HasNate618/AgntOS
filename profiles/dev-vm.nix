@@ -34,8 +34,14 @@
 
   programs.bash.interactiveShellInit = ''
     if [ -d /mnt/agntos-src ]; then
-      echo "AgntOS source mounted at /mnt/agntos-src"
-      alias agntos-rebuild="cd /mnt/agntos-src && cargo build"
+      alias agntos="cd /mnt/agntos-src"
+      alias agnt-build="cd /mnt/agntos-src && cargo build --release"
+      alias agnt-check="cd /mnt/agntos-src && cargo check"
+      alias agnt-inspect="cd /mnt/agntos-src && cargo run --bin agntctl -- inspect"
+      alias agnt-agent="cd /mnt/agntos-src && cargo run --bin agntd"
+      alias vbox-mount="sudo mount -t vboxsf agntos-src /mnt/agntos-src"
+      export PATH="/mnt/agntos-src/target/release:$PATH"
+      echo "AgntOS dev ready: agnt-build | agnt-inspect | agnt-agent"
     fi
   '';
 
