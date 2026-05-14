@@ -7,18 +7,18 @@ in {
   # ── Distro identity ──
 
   environment.etc = {
-    "os-release".text = ''
-      PRETTY_NAME="AgntOS 24.11 (Vicuna)"
-      NAME="AgntOS"
-      ID=agntos
-      ID_LIKE=nixos
-      VERSION_ID=24.11
-      VERSION="24.11 (Vicuna)"
-      VERSION_CODENAME=vicuna
+    "os-release".text = lib.mkForce ''
+      ANSI_COLOR="38;2;245;124;72"
       BUILD_ID=${config.system.nixos.revision or "unknown"}
       HOME_URL="https://agntos.ai"
+      ID=agntos
+      ID_LIKE=nixos
       LOGO=agntos
-      ANSI_COLOR="38;2;245;124;72"
+      NAME="AgntOS"
+      PRETTY_NAME="AgntOS 24.11 (Vicuna)"
+      VERSION="24.11 (Vicuna)"
+      VERSION_CODENAME=vicuna
+      VERSION_ID=24.11
     '';
 
     "agntos/logo.txt".source = "${pkgs.agntos-branding}/share/agntos/logo.txt";
