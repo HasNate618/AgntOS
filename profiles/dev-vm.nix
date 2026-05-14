@@ -3,6 +3,9 @@
 {
   agntos.enable = true;
   agntos.edition = "dev";
+  agntos.agent.enable = true;
+  # Inside the VM the source is mounted at /mnt/agntos-src
+  agntos.rebuild.flakeUri = "/mnt/agntos-src#agntos-dev-vm";
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;

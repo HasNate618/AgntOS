@@ -74,6 +74,42 @@ impl SessionStore {
         Ok(())
     }
 
+    /// Returns the most recent turns (up to `limit`) across all sessions,
+    /// ordered newest-first.
+    pub fn recent_turns(&self, limit: usize) -> Result<Vec<SessionHit>, String> {
+        let conn = self.open()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT rowid, session_id, role, content, created_at
+                 FROM session_turns
+                 ORDER BY id DESC
+                 LIMIT ?1",
+            )
+            .map_err(|e| format!("Failed to query recent turns: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                let ts: String = row.get(4)?;
+                let parsed = DateTime::parse_from_rfc3339(&ts)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+                Ok(SessionHit {
+                    row_id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    role: row.get(2)?,
+                    content: row.get(3)?,
+                    timestamp: parsed,
+                })
+            })
+            .map_err(|e| format!("Failed to query recent turns: {}", e))?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(|e| format!("Failed to read recent turn: {}", e))?);
+        }
+        Ok(out)
+    }
+
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SessionHit>, String> {
         let conn = self.open()?;
         let mut stmt = conn

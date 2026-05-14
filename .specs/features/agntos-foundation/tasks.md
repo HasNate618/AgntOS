@@ -116,7 +116,7 @@ Note: Keyword-matching REPL replaced by LLM-powered agent loop in Phase 1.
 
 ### T010: Define Model Routing Config
 
-Status: `[~]`
+Status: `[x]`
 
 Requirements: AGF-007
 
@@ -128,11 +128,11 @@ Done when:
 - TOML format chosen and documented.
 - No hardcoded model endpoints or defaults.
 
-Note: Format designed (TOML), implementation in progress. See Phase 1 tasks T101-T102.
+Note: Implemented. models.toml format, agntctl model list/route subcommands, VM-validated.
 
 ### T011: Create Minimal Kirigami Direction Doc
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-002, AGF-006, AGF-007
 
@@ -161,7 +161,7 @@ Verification: Completed. agntctl propose/apply/audit + agntd agent loop verified
 
 ### T101: Model Routing Config Types
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-007
 
@@ -178,7 +178,7 @@ Done when:
 
 ### T102: `agntctl model` Subcommand
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-007
 
@@ -196,7 +196,7 @@ Done when:
 
 ### T103: LLM Client Module
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -215,7 +215,7 @@ Done when:
 
 ### T104: Core Memory System
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -236,7 +236,7 @@ Done when:
 
 ### T105: Memory Tool
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -254,7 +254,7 @@ Done when:
 
 ### T106: Tool Definitions
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -271,7 +271,7 @@ Done when:
 
 ### T107: System Prompt Builder
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -289,7 +289,7 @@ Done when:
 
 ### T108: LLM-Powered Agent Loop
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -310,7 +310,7 @@ Done when:
 
 ### T109: Session Store
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -328,7 +328,7 @@ Done when:
 
 ### T110: Initial Memory Seeding
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-006
 
@@ -346,7 +346,7 @@ Done when:
 
 ### T111: Nix Module Updates
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-005, AGF-006, AGF-007
 
@@ -364,7 +364,7 @@ Done when:
 
 ### T112: End-to-End VM Verification
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: AGF-001 through AGF-009
 

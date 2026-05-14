@@ -116,6 +116,7 @@ fn init_llm_session() -> Option<(tokio::runtime::Runtime, LlmSession)> {
     let inspect_summary = util::capture_inspect("system");
     let _ = seed_memory_if_empty(&cfg, &inspect_summary);
     let system_prompt = llm::build_system_prompt(&cfg, &inspect_summary);
+    let system_prompt = inject_prior_context(&system_prompt, &session_store, 8);
 
     let state = LlmSession {
         client,
@@ -158,6 +159,34 @@ fn seed_memory_if_empty(config_dir: &str, inspect_summary: &str) -> Result<(), S
     };
 
     mem.add(agnt_common::memory::MemoryFile::Memory, "System", &seeded)
+}
+
+/// Reads the most recent session turns and appends a compact summary to the
+/// system prompt so the agent has continuity across restarts.
+fn inject_prior_context(prompt: &str, store: &SessionStore, limit: usize) -> String {
+    let turns = match store.recent_turns(limit) {
+        Ok(t) => t,
+        Err(_) => return prompt.to_string(),
+    };
+
+    if turns.is_empty() {
+        return prompt.to_string();
+    }
+
+    let mut summary = String::from("\n\n## Prior conversation (from last session)\n");
+    for turn in turns.iter().rev() {
+        let role = match turn.role.as_str() {
+            "user" => "User",
+            "assistant" => "Agent",
+            "tool" => "  Tool",
+            _ => &turn.role,
+        };
+        let snippet: String = turn.content.chars().take(120).collect();
+        let ellipsis = if turn.content.len() > 120 { "…" } else { "" };
+        summary.push_str(&format!("{}: {}{}\n", role, snippet, ellipsis));
+    }
+
+    format!("{}{}", prompt, summary)
 }
 
 // ── Status display ───────────────────────────────────────────────────────────

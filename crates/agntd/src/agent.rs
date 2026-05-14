@@ -49,15 +49,16 @@ pub fn agent_turn(
     let mut depth = 0;
     while depth < 6 {
         depth += 1;
-        let resp = runtime.block_on(state.client.complete(&state.messages, &state.tools))?;
+        let resp = runtime.block_on(
+            state
+                .client
+                .complete_streaming(&state.messages, &state.tools),
+        )?;
         state.messages.push(resp.assistant_message.clone());
 
-        // Plain text response — display and finish.
+        // Plain text response — content was already streamed to stdout.
         if resp.tool_calls.is_empty() {
             if !resp.content.trim().is_empty() {
-                for line in resp.content.lines() {
-                    println!("  {}", line);
-                }
                 let _ = state.session_store.append_turn(
                     &state.session_id,
                     "assistant",

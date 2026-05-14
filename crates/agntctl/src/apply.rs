@@ -5,6 +5,24 @@ use std::path::PathBuf;
 
 const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
 
+/// Returns (program, args) for nixos-rebuild based on whether a flake
+/// environment is detected via `/etc/agntos/flake-info`.
+fn rebuild_cmd(dir: &PathBuf) -> std::process::Command {
+    let mut cmd = std::process::Command::new("nixos-rebuild");
+    let flake_path = dir.join("flake-info");
+    if flake_path.exists() {
+        if let Ok(flake_ref) = std::fs::read_to_string(&flake_path) {
+            let trimmed = flake_ref.trim().to_string();
+            if !trimmed.is_empty() {
+                cmd.arg("test").arg("--flake").arg(&trimmed).arg("--impure");
+                return cmd;
+            }
+        }
+    }
+    cmd.arg("test");
+    cmd
+}
+
 pub fn execute(
     proposal_id: &str,
     dry_run: bool,
@@ -50,12 +68,11 @@ pub fn execute(
 
     // Run nixos-rebuild (unless --no-rebuild or --dry-run)
     if !dry_run && !no_rebuild {
-        out.push_str("\n  Running nixos-rebuild test...\n");
-        let rebuild_result = std::process::Command::new("nixos-rebuild")
-            .arg("test")
-            .output();
+        let mut rebuild_result = rebuild_cmd(&dir);
+        out.push_str(&format!("\n  Running {:?}...\n", rebuild_result));
+        let output = rebuild_result.output();
 
-        match rebuild_result {
+        match output {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -232,6 +249,37 @@ mod tests {
         // Verify proposal was cleaned up
         assert!(!dir.join("proposals").join("real456.json").exists());
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_rebuild_cmd_fallback_when_no_flake_info() {
+        let dir = PathBuf::from("/tmp/agntos-apply-no-flake");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cmd = rebuild_cmd(&dir);
+        let args: Vec<&str> = cmd.get_args().map(|a| a.to_str().unwrap_or("")).collect();
+        assert_eq!(args, vec!["test"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_rebuild_cmd_detects_flake() {
+        let dir = PathBuf::from("/tmp/agntos-apply-flake");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("flake-info"), "/home/user/config#my-machine\n").unwrap();
+        let cmd = rebuild_cmd(&dir);
+        let args: Vec<&str> = cmd.get_args().map(|a| a.to_str().unwrap_or("")).collect();
+        assert_eq!(
+            args,
+            vec![
+                "test",
+                "--flake",
+                "/home/user/config#my-machine",
+                "--impure"
+            ]
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }
