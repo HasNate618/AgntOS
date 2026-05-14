@@ -4,9 +4,11 @@
 // shows output, and handles approval flows.
 
 mod llm;
+mod session;
 
 use agnt_common::memory::{CoreMemory, MemoryFile};
 use serde_json::{json, Value};
+use session::SessionStore;
 use std::io::{self, BufRead, Write};
 use std::process::Command;
 
@@ -14,6 +16,8 @@ struct LlmState {
     client: llm::LlmClient,
     messages: Vec<Value>,
     tools: Vec<Value>,
+    session_store: SessionStore,
+    session_id: String,
 }
 
 const AGNTCTL: &str = "agntctl";
@@ -140,6 +144,8 @@ fn init_llm_state() -> Option<(tokio::runtime::Runtime, LlmState)> {
     let cfg = config_dir_str();
     let runtime = tokio::runtime::Runtime::new().ok()?;
     let client = llm::LlmClient::from_config(&cfg, "chat").ok()?;
+    let session_store = SessionStore::from_config_dir(&cfg).ok()?;
+    let session_id = SessionStore::new_session_id();
     let inspect_summary = capture_inspect("system");
     let _ = seed_memory_if_empty(&cfg, &inspect_summary);
     let system_prompt = llm::build_system_prompt(&cfg, &inspect_summary);
@@ -151,6 +157,8 @@ fn init_llm_state() -> Option<(tokio::runtime::Runtime, LlmState)> {
             "content": system_prompt,
         })],
         tools: llm::tool_definitions(),
+        session_store,
+        session_id,
     };
 
     Some((runtime, state))
@@ -205,6 +213,7 @@ fn show_help() {
     println!("  apply <id>             Apply an approved proposal");
     println!("  audit                  Show recent audit log");
     println!("  audit show <id>        Show audit entry details");
+    println!("  history <query>        Search prior turns in local session store");
     println!(
         "  <free text>            Send to LLM tool-calling mode (if models.toml is configured)"
     );
@@ -559,6 +568,35 @@ fn handle_llm_input(
     runtime: &mut tokio::runtime::Runtime,
     state: &mut LlmState,
 ) -> Result<(), String> {
+    let _ = state
+        .session_store
+        .append_turn(&state.session_id, "user", input, None);
+
+    if let Some(query) = input.strip_prefix("history ") {
+        let query = query.trim();
+        if query.is_empty() {
+            println!("  Usage: history <query>");
+            return Ok(());
+        }
+        let hits = state.session_store.search(query, 5)?;
+        if hits.is_empty() {
+            println!("  No history matches for '{}'.", query);
+            return Ok(());
+        }
+        println!("  History matches for '{}':", query);
+        for hit in hits {
+            println!(
+                "  - [{}] {} {} {}: {}",
+                hit.row_id,
+                hit.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                hit.session_id,
+                hit.role,
+                hit.content.replace('\n', " ")
+            );
+        }
+        return Ok(());
+    }
+
     state.messages.push(json!({
         "role": "user",
         "content": input,
@@ -575,6 +613,12 @@ fn handle_llm_input(
                 for line in resp.content.lines() {
                     println!("  {}", line);
                 }
+                let _ = state.session_store.append_turn(
+                    &state.session_id,
+                    "assistant",
+                    &resp.content,
+                    None,
+                );
             } else {
                 println!("  (no response text)");
             }
@@ -586,6 +630,10 @@ fn handle_llm_input(
                 Ok(s) => s,
                 Err(e) => format!("TOOL_ERROR: {}", e),
             };
+            let _ =
+                state
+                    .session_store
+                    .append_turn(&state.session_id, "tool", &result, Some(&tc.name));
             state.messages.push(json!({
                 "role": "tool",
                 "tool_call_id": tc.id,
