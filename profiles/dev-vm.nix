@@ -52,5 +52,10 @@
     fi
   '';
 
+  system.activationScripts.ghostty-config = ''
+    mkdir -p /home/developer/.config/ghostty
+    ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
+  '';
+
   system.stateVersion = "24.11";
 }
