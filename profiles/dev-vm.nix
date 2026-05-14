@@ -25,6 +25,16 @@
 
   users.users.root.initialPassword = "agntos";
 
+  environment.systemPackages = with pkgs; [
+    cargo
+    rustc
+    rust-analyzer
+    clippy
+    git
+    gcc
+    wget
+  ];
+
   programs.bash.interactiveShellInit = ''
     if [ -d /mnt/agntos-src ]; then
       echo "AgntOS source mounted at /mnt/agntos-src"
