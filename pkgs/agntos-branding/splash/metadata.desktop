@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=AgntOS
+Comment=AgntOS splash screen
+Type=Service
+X-KDE-ServiceTypes=Plasma/LookAndFeel
+X-KDE-PluginInfo-Author=AgntOS
+X-KDE-PluginInfo-Category=Splash
+X-KDE-PluginInfo-Email=hello@agntos.ai
+X-KDE-PluginInfo-Name=agntos-splash
+X-KDE-PluginInfo-Version=1.0
+X-KDE-PluginInfo-Website=https://agntos.ai
+X-KDE-Splash-Theme=true

@@ -61,7 +61,9 @@
     grep -q 'TerminalApplication' /home/developer/.config/kdeglobals 2>/dev/null || \
       sed -i '/^\[General\]/a TerminalApplication=ghostty' /home/developer/.config/kdeglobals 2>/dev/null || \
       printf '[General]\nTerminalApplication=ghostty\n' >> /home/developer/.config/kdeglobals
-    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals
+    # Set splash theme
+    printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
+    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals /home/developer/.config/ksplashrc
   '';
 
   systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce

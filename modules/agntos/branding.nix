@@ -59,7 +59,7 @@ in {
   environment.etc."xdg/ksplashrc".text = ''
     [KSplash]
     Engine=KSplashQML
-    Theme=org.kde.breeze.desktop
+    Theme=agntos-splash
   '';
 
   environment.etc."xdg/kdeglobals".text = ''
