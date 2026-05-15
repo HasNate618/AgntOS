@@ -114,8 +114,11 @@ SH
     # Splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
 
+    # Clear KDE icon cache so it rebuilds with our new icon theme
+    rm -f /home/developer/.cache/icon-cache.kcache
+
     chown -R developer:users /home/developer/.config \
-      /home/developer/.local/share 2>/dev/null || true
+      /home/developer/.local/share /home/developer/.cache 2>/dev/null || true
   '';
 
   systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce
