@@ -156,7 +156,17 @@ in {
     logo = "${pkgs.agntos-branding}/share/agntos/logos/agntos.png";
   };
 
-  boot.initrd.kernelModules = [ "bochs" ];
+  boot.initrd.kernelModules = [ "bochs" "drm" ];
+
+  # Silent boot — suppress kernel messages for clean Plymouth display
+  boot.consoleLogLevel = 3;
+  boot.initrd.verbose = false;
+  boot.kernelParams = [
+    "quiet"
+    "udev.log_level=3"
+    "systemd.show_status=auto"
+  ];
+  boot.loader.timeout = 0;
 
   # ── System packages ──
 
