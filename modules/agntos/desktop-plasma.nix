@@ -34,23 +34,21 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
-      # Kvantum for both Qt5 and Qt6 app transparency
-      libsForQt5.qtstyleplugin-kvantum
-      qt6Packages.qtstyleplugin-kvantum
     ];
 
-    # Enable Kvantum Qt6 style for application transparency
+    # Use NixOS Qt module for proper Qt5/Qt6 theming and plugin paths
+    # This sets QT_PLUGIN_PATH, QML2_IMPORT_PATH, QT_QPA_PLATFORMTHEME, and QT_STYLE_OVERRIDE
+    # correctly so Kvantum style plugins are discoverable by both Qt5 and Qt6 apps.
+    programs.qt = {
+      enable = true;
+      platformTheme = "qt5ct";
+      style = "kvantum";
+    };
+
+    # Kvantum theme selection
     environment.sessionVariables = {
       KVANTUM_THEME = "WinSur-dark";
     };
-
-    # SDDM reads /etc/environment via PAM — ensure it gets plugin path
-    system.activationScripts.qt-env = ''
-      cat > /etc/environment << 'ENV'
-QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins
-KVANTUM_THEME=WinSur-dark
-ENV
-    '';
 
     programs.dconf.enable = true;
   };

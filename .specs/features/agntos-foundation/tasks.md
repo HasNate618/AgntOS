@@ -569,3 +569,251 @@ Done when:
 - Script validates socket-mode agntd with a real prompt.
 - Script validates rollback friendly errors on transient systems.
 
+
+## Phase 1 Expansion — Surgical Rollback, Nix Validation, Option Templates
+
+### T301: Audit tracking for files_written/files_deleted
+
+Status: `[x]`
+
+Requirements: Surgical rollback.
+
+What:
+Add `files_written` and `files_deleted` fields to `AuditEntry` and `ConfigProposal`.
+Track these in apply/rollback operations.
+
+Where:
+- `crates/agnt-common/src/audit.rs`
+- `crates/agnt-common/src/config.rs`
+
+Done when:
+- `AuditEntry.files_written` and `files_deleted` exist with `#[serde(default)]`.
+- `ConfigProposal.files_to_delete` exists with `#[serde(default)]`.
+- Apply operation records files written and deleted.
+
+### T302: `agntctl rollback undo` (surgical rollback)
+
+Status: `[x]`
+
+Requirements: T301.
+
+What:
+Implement `execute_undo()` in rollback module that reads the audit log, finds the last
+successful Apply entry, and reverses its file operations.
+
+Where:
+- `crates/agntctl/src/rollback.rs`
+
+Done when:
+- `agntctl rollback undo` reads audit log and finds latest Apply entry.
+- Files listed in `files_written` are deleted.
+- Files listed in `files_deleted` print a warning (cannot restore).
+- `nixos-rebuild` runs after cleanup.
+
+### T303: `--persist` flag for apply
+
+Status: `[x]`
+
+Requirements: Production-ready apply.
+
+What:
+Add `--persist` flag to `agntctl apply` that uses `nixos-rebuild switch` instead of `test`.
+
+Where:
+- `crates/agntctl/src/apply.rs`
+- `crates/agntctl/src/main.rs`
+
+Done when:
+- `--persist` flag exists and triggers `switch` mode.
+- Default behavior remains `test` (ephemeral).
+- All existing tests pass.
+
+### T304: Nix expression validation
+
+Status: `[x]`
+
+Requirements: Safe Nix generation.
+
+What:
+Add `validate_nix()` function that writes generated content to a temp file and runs
+`nix-instantiate --parse`. Rejects proposals with invalid Nix syntax.
+
+Where:
+- `crates/agntctl/src/propose.rs`
+
+Done when:
+- Every `generate()` call validates output before saving.
+- Invalid Nix returns an error to the user.
+- If `nix-instantiate` is not available, validation is silently skipped.
+
+### T305: Option-change proposal templates
+
+Status: `[x]`
+
+Requirements: Arbitrary NixOS option configuration.
+
+What:
+Add `set <option> <value>` template that generates a proper NixOS module for any
+NixOS option. Support strings, bools, numbers, and raw expressions.
+
+Where:
+- `crates/agntctl/src/propose.rs`
+- `modules/agntos/base.nix`
+
+Done when:
+- `propose set networking.hostName myhost` generates correct module.
+- `propose set services.openssh.enable false` generates bool value.
+- `/etc/agntos/options/` directory is imported by base.nix.
+- Tests exist for string, bool, int values.
+
+## Phase 1 Expansion — Memory & Provenance
+
+### T401: Provenance fields on AuditEntry
+
+Status: `[ ]`
+
+Requirements: Contextual memory (the "why").
+
+What:
+Add `prompt: Option<String>` and `rationale: Option<String>` to `AuditEntry`.
+Pass the user's original prompt and the agent's rationale for the action through
+the propose/apply pipeline so the audit log records why changes were made.
+
+Where:
+- `crates/agnt-common/src/audit.rs`
+- `crates/agntd/src/agent.rs`
+
+Done when:
+- `AuditEntry` has `prompt` and `rationale` fields with `#[serde(default)]`.
+- Agent passes original prompt through propose/apply tool calls.
+- `agntctl audit show <id>` displays provenance fields.
+- `agntctl audit search <term>` can find entries by prompt content.
+
+### T402: Memory system prompt optimization
+
+Status: `[ ]`
+
+Requirements: Efficient memory usage.
+
+What:
+Update the system prompt instructions to guide the agent away from storing
+inspectable system facts in memory. Emphasize storing preferences, intent,
+workflow patterns, and non-derivable user context instead.
+
+Where:
+- `crates/agntd/src/llm.rs`
+
+Done when:
+- System prompt instructs: "Don't store facts you can inspect. Store preferences,
+  intent, and context that can't be derived from system state."
+- Memory capacity is freed up for higher-value entries.
+- Consolidation runs less frequently.
+
+### T403: End-of-session memory consolidation
+
+Status: `[ ]`
+
+Requirements: Automatic memory extraction without Hermes-style background pipeline.
+
+What:
+On session end (socket close, idle timeout, or explicit signal), the agent reviews
+the conversation turn log and updates MEMORY.md / USER.md with any new facts worth
+remembering. Runs `consolidate` automatically afterward.
+
+Where:
+- `crates/agntd/src/agent.rs`
+- `crates/agnt-common/src/memory.rs`
+
+Done when:
+- Socket close triggers memory review step.
+- Agent iterates recent session turns and extracts new facts via `memory add`.
+- Auto-consolidation runs after additions.
+- No separate background extraction pipeline needed.
+- User can disable auto-consolidation via config.
+
+## Phase 1 Expansion — Proactive Self-Healing
+
+### T501: System health watchdog loop
+
+Status: `[ ]`
+
+Requirements: Proactive monitoring.
+
+What:
+Add a lightweight polling loop to `agntd` that runs every 5 minutes and checks
+for specific system anomalies using targeted bash commands.
+
+Where:
+- `crates/agntd/src/watchdog.rs` (new)
+- `crates/agntd/src/main.rs`
+
+Done when:
+- Polling loop runs `systemctl --failed`, `df -h`, `dmesg | grep -i oom`.
+- Results are checked against thresholds (e.g., disk > 95%).
+- No firehose monitoring — only targeted, cheap checks.
+- Loop runs on a timer, not continuously.
+
+### T502: Log triage and fix drafting
+
+Status: `[ ]`
+
+Requirements: T501.
+
+What:
+When a watchdog check trips, `agntd` fetches targeted logs (e.g., `journalctl -u <failed_service> -n 50`)
+and sends a hidden prompt to the local model to evaluate the issue.
+
+Where:
+- `crates/agntd/src/watchdog.rs`
+
+Done when:
+- Watchdog trigger fetches targeted logs.
+- Local model evaluates: "Is this a config error requiring NixOS change, or transient?"
+- If config error: model drafts a `ConfigProposal`.
+- If transient: logged as info, no action taken.
+- No raw log firehose fed to model — only the relevant 50 lines.
+
+### T503: Notification and proposal queue
+
+Status: `[ ]`
+
+Requirements: T502.
+
+What:
+Drafted fixes from watchdog evaluations are saved as pending `ConfigProposal`s.
+User receives a desktop notification (or socket response) to review.
+
+Where:
+- `crates/agntd/src/watchdog.rs`
+- `crates/agntd/src/agent.rs`
+
+Done when:
+- Drafted proposals are saved to `/etc/agntos/proposals/`.
+- User is notified: "Service X failed. Fix drafted. Run `agntctl propose list`."
+- Proposals follow the same propose/apply/audit/undo workflow.
+- User can ignore or apply.
+
+## Phase 2 — Model Management & Routing
+
+### T601: Model registry end-to-end
+
+Status: `[ ]`
+
+Requirements: User-configurable model endpoints.
+
+What:
+Build the full model management experience: add/remove model profiles, API key
+configuration (secure storage), task-class routing UI, and local backend adapter.
+
+Where:
+- `crates/agnt-common/src/models.rs`
+- `crates/agntctl/src/model.rs`
+- `crates/agntd/src/llm.rs`
+
+Done when:
+- `agntctl model add` creates a new profile in `models.toml`.
+- `agntctl model remove` deletes a profile.
+- API keys stored via secure mechanism (not just env vars).
+- Task-class routing respects per-task model assignments.
+- Local backend (Ollama or llama.cpp) works for simple tasks (chat, log analysis).
+- Hardware-aware suggestions work: `agntctl model suggest` picks appropriate model.

@@ -28,25 +28,31 @@ flowchart TD
 4. **Tool calls** → `agntctl` subprocess → result fed back to LLM
 5. **LLM produces final response** using tool results
 6. **Memory updates**: agent may call `memory` tool to add/update facts
-7. **Turn saved** to session store (SQLite FTS5)
-8. **Destructive ops** (apply): confirmation prompt before execution
+7. **Provenance capture**: every mutation records prompt + rationale in audit entry
+8. **Turn saved** to session store (SQLite FTS5)
+9. **Destructive ops** (apply): confirmation prompt before execution
+10. **End of session** (socket close / idle): agent reviews and consolidates memory
 
-### Hermes-Style Memory Layer
+### Memory Architecture
 
 Memory is the core architectural difference from a generic chatbot. Two levels:
 
 | Level | Storage | Capacity | Availability | Use case |
 |---|---|---|---|---|
-| **Core memory** | `MEMORY.md`, `USER.md` | ~3,500 chars total | Always in system prompt | System facts, preferences, lessons |
+| **Core memory** | `MEMORY.md`, `USER.md` | ~3,500 chars total | Always in system prompt | Preferences, intent, non-derivable user context |
 | **Session search** | SQLite FTS5 | Unlimited | On-demand | "When did we fix DNS?" |
 
 Core memory is:
-- **Agent-curated**: the agent adds/replaces/removes facts via `memory` tool
-- **Bounded**: hard character caps force curation > quality
-- **Frozen snapshot**: loaded once per session, changes persist to disk for next session
-- **Security-scanned**: injection, exfiltration, invisible Unicode detected on every write
+- **Agent-curated**: the agent adds/replaces/removes facts via `memory` tool. No background extraction -- the agent is the best judge of what matters, in-context.
+- **Bounded**: hard character caps force curation over quantity.
+- **Frozen snapshot**: loaded once per session, changes persist to disk for next session.
+- **Focused on non-derivable facts**: memory is for preferences and intent, not inspectable system state (CPU, RAM, packages are re-inspectable via `agntctl inspect`).
+- **End-of-session consolidation**: on socket close or idle, agent reviews the session and updates memory automatically.
+- **Security-scanned**: injection, exfiltration, invisible Unicode detected on every write.
 
-This is deliberately NOT a vector database or RAG system. The facts an OS agent needs (GPU model, disk layout, package list) are small, stable, and always relevant. A vector DB adds latency, complexity, and failure modes without providing value.
+**Provenance is separate from memory.** The audit log tracks `prompt` and `rationale` alongside every mutation -- capturing the "why" at the source, rather than inferring it later.
+
+This is deliberately NOT a vector database, RAG system, or Hermes-style background extraction pipeline. The facts an OS agent needs (user preferences, past decisions, workflow patterns) are small and stable. A background inference pipeline adds complexity, unreliability, and cost without providing value -- the agent already has full context during the conversation and is the best judge of what matters.
 
 ## Repository Shape
 
@@ -187,8 +193,8 @@ The audit log is JSONL at `/var/log/agntos/audit.jsonl`. Append-only. Read by `a
 - Alternate desktop editions.
 - AI Anywhere overlay.
 - Background automation workspace.
+- Home Manager integration (user dotfiles with same propose/apply/audit workflow).
 - Additional model backends.
 - Skills system.
-- Hermes integration or fork.
 - Stronger policy engine.
 - GUI installer customization.
