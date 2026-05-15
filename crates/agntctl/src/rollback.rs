@@ -145,12 +145,99 @@ fn log_rollback(result: Result<(), String>, config_dir: &PathBuf) -> Result<(), 
         actor: "user".to_string(),
         summary,
         files_changed: Vec::new(),
+        files_written: vec![],
+        files_deleted: vec![],
         rollback_hint: Some("Rolled back via nixos-rebuild switch --rollback".to_string()),
         result: audit_result,
     };
 
     let log_path = crate::audit::get_log_path(Some(config_dir));
     AuditLog::append_to_disk(&log_path, &entry)
+}
+
+/// Surgical rollback: reads the last successful apply from the audit log,
+/// reverses its file operations (deletes written files, warns on deleted),
+/// and runs nixos-rebuild.
+pub fn execute_undo(config_dir: Option<&PathBuf>) -> Result<String, String> {
+    use crate::audit::get_log_path;
+
+    let dir = config_dir
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_DIR));
+
+    let log_path = get_log_path(Some(&dir));
+    let log = AuditLog::load(&log_path)?;
+
+    // Find the last successful Apply entry
+    let last = log
+        .entries
+        .iter()
+        .rev()
+        .find(|e| {
+            matches!(e.action, AuditAction::Apply { .. })
+                && matches!(e.result, AuditResult::Success { .. })
+        })
+        .ok_or_else(|| "No previous apply found in audit log to undo.".to_string())?;
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "Undoing apply from {}: {}\n",
+        last.timestamp.format("%Y-%m-%d %H:%M:%S"),
+        last.summary
+    ));
+
+    // Delete files that were written
+    for f in &last.files_written {
+        let path = PathBuf::from(f);
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("Failed to delete {}: {}", path.display(), e))?;
+            out.push_str(&format!("  Deleted: {}\n", path.display()));
+        } else {
+            out.push_str(&format!("  Skip:     {} (not found)\n", path.display()));
+        }
+    }
+
+    // Warn about files that were deleted and can't be restored
+    for f in &last.files_deleted {
+        out.push_str(&format!(
+            "  Warning:  {} was removed by the original apply and cannot be restored automatically. Run `agntctl propose install/remove` to fix.\n",
+            f
+        ));
+    }
+
+    if last.files_written.is_empty() && last.files_deleted.is_empty() {
+        out.push_str("  Nothing to undo — no files were changed by this apply.\n");
+    }
+
+    // Run nixos-rebuild
+    let mut cmd = std::process::Command::new("nixos-rebuild");
+    let flake_path = dir.join("flake-info");
+    if flake_path.exists() {
+        if let Ok(flake_ref) = std::fs::read_to_string(&flake_path) {
+            let trimmed = flake_ref.trim().to_string();
+            if !trimmed.is_empty() {
+                cmd.arg("test").arg("--flake").arg(&trimmed).arg("--impure");
+            }
+        }
+    } else {
+        cmd.arg("test");
+    }
+
+    out.push_str(&format!("\n  Running {:?}...\n", cmd));
+    let output = cmd
+        .output()
+        .map_err(|e| format!("nixos-rebuild failed: {}", e))?;
+
+    if output.status.success() {
+        out.push_str("  nixos-rebuild test: OK\n");
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("nixos-rebuild failed:\n{}", stderr));
+    }
+
+    let _ = log_rollback(Ok(()), &dir);
+    Ok(out)
 }
 
 #[cfg(test)]

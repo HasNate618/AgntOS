@@ -4,6 +4,48 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
 
+/// Validates a Nix expression by parsing it with `nix-instantiate --parse`.
+/// Returns Ok(()) if the expression parses cleanly.
+fn validate_nix(content: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!(
+        "agntos-nix-val-{}-{}.nix",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut f =
+        std::fs::File::create(&tmp).map_err(|e| format!("Failed to create temp file: {}", e))?;
+    f.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+    drop(f);
+
+    let output = std::process::Command::new("nix-instantiate")
+        .arg("--parse")
+        .arg(&tmp)
+        .output();
+
+    let _ = std::fs::remove_file(&tmp);
+
+    match output {
+        Ok(out) if out.status.success() => Ok(()),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            Err(format!("Nix syntax error:\n{}", stderr.trim()))
+        }
+        Err(e) => {
+            // nix-instantiate not available — skip validation
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(format!("nix-instantiate failed: {}", e))
+            }
+        }
+    }
+}
+
 pub fn execute(
     description: &str,
     dry_run: bool,
@@ -55,6 +97,14 @@ pub fn execute(
 }
 
 fn generate(description: &str) -> Result<ConfigProposal, String> {
+    let proposal = generate_raw(description)?;
+    for (_, content) in &proposal.files_to_write {
+        validate_nix(content)?;
+    }
+    Ok(proposal)
+}
+
+fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
     let lower = description.trim().to_lowercase();
     let id = generate_id();
 
@@ -139,6 +189,52 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
             rollback_guidance: format!(
                 "To rollback: run `agntctl propose enable {}` to re-create the service module.",
                 service
+            ),
+        })
+    } else if lower.starts_with("set ") {
+        let rest = description
+            .trim()
+            .strip_prefix("set ")
+            .or_else(|| description.trim().strip_prefix("SET "))
+            .unwrap_or("");
+        let (option_path, value) = if let Some(idx) = rest.find(" = ") {
+            (
+                rest[..idx].trim().to_string(),
+                rest[idx + 3..].trim().to_string(),
+            )
+        } else if let Some(idx) = rest.find(' ') {
+            (
+                rest[..idx].trim().to_string(),
+                rest[idx + 1..].trim().to_string(),
+            )
+        } else {
+            (rest.trim().to_string(), "true".to_string())
+        };
+        let value_expr = if value == "true" || value == "false" {
+            value
+        } else if value.starts_with('[') || value.starts_with('{') {
+            value
+        } else if value.parse::<f64>().is_ok() {
+            value
+        } else {
+            format!("\"{}\"", value.trim_matches('"'))
+        };
+        let file_path = format!("options/{}.nix", option_path.replace('.', "-"));
+        Ok(ConfigProposal {
+            id,
+            summary: format!("Set option: {} = {}", option_path, value_expr),
+            nix_changes: format!("{}.{} = {};", option_path, option_path, value_expr),
+            files_to_write: vec![(
+                file_path,
+                format!(
+                    "{{ config, lib, pkgs, ... }}: {{\n  {}.{} = {};\n}}\n",
+                    option_path, option_path, value_expr
+                ),
+            )],
+            files_to_delete: vec![],
+            rollback_guidance: format!(
+                "To rollback: run `agntctl propose set {} <original-value>`.",
+                option_path
             ),
         })
     } else {
@@ -226,6 +322,25 @@ mod tests {
         let p = generate("some custom thing").unwrap();
         assert!(p.summary.contains("some custom thing"));
         assert!(p.nix_changes.contains("TODO"));
+    }
+
+    #[test]
+    fn test_generate_set_string() {
+        let p = generate("set networking.hostName myhost").unwrap();
+        assert!(p.summary.contains("networking.hostName"));
+        assert!(p.files_to_write[0].1.contains("\"myhost\""));
+    }
+
+    #[test]
+    fn test_generate_set_bool() {
+        let p = generate("set services.openssh.enable true").unwrap();
+        assert!(p.files_to_write[0].1.contains("true"));
+    }
+
+    #[test]
+    fn test_generate_set_int() {
+        let p = generate("set boot.kernel.sysctl.vm.swappiness 10").unwrap();
+        assert!(p.files_to_write[0].1.contains("= 10;"));
     }
 
     #[test]

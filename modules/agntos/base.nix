@@ -3,6 +3,7 @@
 let
   cfgDir = "/etc/agntos";
   packagesDir = "${cfgDir}/packages";
+  optionsDir = "${cfgDir}/options";
   servicesDir = "${cfgDir}/services";
 
   optionalImport = path: lib.optional (builtins.pathExists path) path;
@@ -20,6 +21,7 @@ let
       [ ];
 
   packagesImports = dirImports packagesDir;
+  optionsImports = dirImports optionsDir;
   serviceImports = dirImports servicesDir;
 in
 
@@ -27,6 +29,7 @@ in
   imports =
     packagesImports
     ++ optionalImport "${cfgDir}/custom.nix"
+    ++ optionsImports
     ++ serviceImports;
 
   options.agntos = {
@@ -67,6 +70,7 @@ in
       systemd.tmpfiles.rules = [
         "d ${config.agntos.configDir} 0755 root root -"
         "d ${config.agntos.configDir}/packages 0755 root root -"
+        "d ${config.agntos.configDir}/options 0755 root root -"
         "d ${config.agntos.configDir}/proposals 0755 root root -"
         "d ${config.agntos.configDir}/services 0755 root root -"
         "d ${config.agntos.configDir}/memory 0755 root root -"

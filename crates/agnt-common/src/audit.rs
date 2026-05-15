@@ -12,6 +12,10 @@ pub struct AuditEntry {
     pub actor: String,
     pub summary: String,
     pub files_changed: Vec<String>,
+    #[serde(default)]
+    pub files_written: Vec<String>,
+    #[serde(default)]
+    pub files_deleted: Vec<String>,
     pub rollback_hint: Option<String>,
     pub result: AuditResult,
 }

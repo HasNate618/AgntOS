@@ -114,6 +114,8 @@ pub fn log_inspect(target: &str, config_dir: Option<&PathBuf>) -> Result<(), Str
         actor: "user".to_string(),
         summary: format!("Inspected {}", target),
         files_changed: Vec::new(),
+        files_written: vec![],
+        files_deleted: vec![],
         rollback_hint: None,
         result: AuditResult::Success { message: None },
     };
@@ -132,6 +134,8 @@ pub fn log_write(path: &str, bytes: usize, config_dir: Option<&PathBuf>) {
         actor: "user".to_string(),
         summary: format!("Wrote {} ({} bytes)", path, bytes),
         files_changed: vec![path.to_string()],
+        files_written: vec![path.to_string()],
+        files_deleted: vec![],
         rollback_hint: None,
         result: AuditResult::Success { message: None },
     };
@@ -155,6 +159,8 @@ pub fn log_edit(path: &str, old_str: &str, new_str: &str, config_dir: Option<&Pa
             new_str.chars().take(60).collect::<String>(),
         ),
         files_changed: vec![path.to_string()],
+        files_written: vec![path.to_string()],
+        files_deleted: vec![],
         rollback_hint: None,
         result: AuditResult::Success { message: None },
     };
@@ -195,6 +201,8 @@ pub fn log_bash(
         actor: "user".to_string(),
         summary: format!("bash: {} (exit {}) — {}", command, exit_code, excerpt,),
         files_changed: Vec::new(),
+        files_written: vec![],
+        files_deleted: vec![],
         rollback_hint: None,
         result: status,
     };

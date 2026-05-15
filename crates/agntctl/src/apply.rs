@@ -28,20 +28,22 @@ fn resolve_safe(base: &Path, rel: &str) -> Result<PathBuf, String> {
 }
 
 /// Returns (program, args) for nixos-rebuild based on whether a flake
-/// environment is detected via `/etc/agntos/flake-info`.
-fn rebuild_cmd(dir: &PathBuf) -> std::process::Command {
+/// environment is detected via `/etc/agntos/flake-info` and whether
+/// `persist` was requested (switch vs test).
+fn rebuild_cmd(dir: &PathBuf, persist: bool) -> std::process::Command {
     let mut cmd = std::process::Command::new("nixos-rebuild");
+    let action = if persist { "switch" } else { "test" };
     let flake_path = dir.join("flake-info");
     if flake_path.exists() {
         if let Ok(flake_ref) = std::fs::read_to_string(&flake_path) {
             let trimmed = flake_ref.trim().to_string();
             if !trimmed.is_empty() {
-                cmd.arg("test").arg("--flake").arg(&trimmed).arg("--impure");
+                cmd.arg(action).arg("--flake").arg(&trimmed).arg("--impure");
                 return cmd;
             }
         }
     }
-    cmd.arg("test");
+    cmd.arg(action);
     cmd
 }
 
@@ -49,6 +51,7 @@ pub fn execute(
     proposal_id: &str,
     dry_run: bool,
     no_rebuild: bool,
+    persist: bool,
     config_dir: Option<&PathBuf>,
 ) -> Result<String, String> {
     let dir = config_dir
@@ -121,7 +124,8 @@ pub fn execute(
     };
 
     // Write the Nix files
-    let mut written_files = Vec::new();
+    let mut written_file_paths: Vec<String> = Vec::new();
+    let mut deleted_file_paths: Vec<String> = Vec::new();
     for (filename, content) in &proposal.files_to_write {
         let filepath = resolve_safe(&dir, filename)?;
         if dry_run {
@@ -136,7 +140,7 @@ pub fn execute(
                 .map_err(|e| format!("Failed to write {}: {}", filepath.display(), e))?;
             out.push_str(&format!("  Written:     {}\n", filepath.display()));
         }
-        written_files.push(filepath.display().to_string());
+        written_file_paths.push(filepath.display().to_string());
     }
 
     // Delete files marked for removal
@@ -149,7 +153,7 @@ pub fn execute(
                 std::fs::remove_file(&filepath)
                     .map_err(|e| format!("Failed to delete {}: {}", filepath.display(), e))?;
                 out.push_str(&format!("  Deleted:     {}\n", filepath.display()));
-                written_files.push(filepath.display().to_string());
+                deleted_file_paths.push(filepath.display().to_string());
             } else {
                 out.push_str(&format!(
                     "  Skip delete: {} (not found)\n",
@@ -159,9 +163,15 @@ pub fn execute(
         }
     }
 
+    let all_changed: Vec<String> = written_file_paths
+        .iter()
+        .chain(deleted_file_paths.iter())
+        .cloned()
+        .collect();
+
     // Run nixos-rebuild (unless --no-rebuild or --dry-run)
     if !dry_run && !no_rebuild {
-        let mut rebuild_result = rebuild_cmd(&dir);
+        let mut rebuild_result = rebuild_cmd(&dir, persist);
         out.push_str(&format!("\n  Running {:?}...\n", rebuild_result));
         let output = rebuild_result.output();
 
@@ -192,7 +202,9 @@ pub fn execute(
                     // Log the failure
                     let _ = log_apply(
                         &proposal,
-                        &written_files,
+                        &all_changed,
+                        &written_file_paths,
+                        &deleted_file_paths,
                         Err("nixos-rebuild failed".to_string()),
                         &dir,
                         dry_run,
@@ -206,7 +218,15 @@ pub fn execute(
             Err(e) => {
                 let msg = format!("nixos-rebuild not available: {}\n  (Install NixOS or use --no-rebuild to skip)", e);
                 out.push_str(&format!("  Warning: {}\n", msg));
-                let _ = log_apply(&proposal, &written_files, Err(msg.clone()), &dir, dry_run);
+                let _ = log_apply(
+                    &proposal,
+                    &all_changed,
+                    &written_file_paths,
+                    &deleted_file_paths,
+                    Err(msg.clone()),
+                    &dir,
+                    dry_run,
+                );
                 return Err(out);
             }
         }
@@ -222,7 +242,15 @@ pub fn execute(
     }
 
     // Log the apply
-    let result = log_apply(&proposal, &written_files, Ok(()), &dir, dry_run);
+    let result = log_apply(
+        &proposal,
+        &all_changed,
+        &written_file_paths,
+        &deleted_file_paths,
+        Ok(()),
+        &dir,
+        dry_run,
+    );
     if let Err(e) = result {
         out.push_str(&format!("  Warning: failed to log audit entry: {}\n", e));
     }
@@ -242,6 +270,8 @@ pub fn execute(
 fn log_apply(
     proposal: &ConfigProposal,
     files: &[String],
+    files_written: &[String],
+    files_deleted: &[String],
     result: Result<(), String>,
     config_dir: &PathBuf,
     dry_run: bool,
@@ -270,6 +300,8 @@ fn log_apply(
         actor: "user".to_string(),
         summary,
         files_changed: files.to_vec(),
+        files_written: files_written.to_vec(),
+        files_deleted: files_deleted.to_vec(),
         rollback_hint: Some(proposal.rollback_guidance.clone()),
         result: audit_result,
     };
@@ -308,6 +340,7 @@ mod tests {
             "nonexistent",
             true,
             true,
+            false,
             Some(&PathBuf::from("/tmp/agntos-apply-test")),
         );
         assert!(result.is_err());
@@ -319,7 +352,7 @@ mod tests {
         let dir = PathBuf::from("/tmp/agntos-apply-test-dry");
         let _ = fs::remove_dir_all(&dir);
         create_test_proposal(&dir, "test123");
-        let result = execute("test123", true, true, Some(&dir));
+        let result = execute("test123", true, true, false, Some(&dir));
         assert!(result.is_ok());
         let out = result.unwrap();
         assert!(out.contains("DRY RUN"));
@@ -332,7 +365,7 @@ mod tests {
         let dir = PathBuf::from("/tmp/agntos-apply-test-real");
         let _ = fs::remove_dir_all(&dir);
         create_test_proposal(&dir, "real456");
-        let result = execute("real456", false, true, Some(&dir));
+        let result = execute("real456", false, true, false, Some(&dir));
         assert!(result.is_ok());
         let out = result.unwrap();
 
@@ -353,7 +386,7 @@ mod tests {
         let dir = PathBuf::from("/tmp/agntos-apply-no-flake");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let cmd = rebuild_cmd(&dir);
+        let cmd = rebuild_cmd(&dir, false);
         let args: Vec<&str> = cmd.get_args().map(|a| a.to_str().unwrap_or("")).collect();
         assert_eq!(args, vec!["test"]);
         let _ = fs::remove_dir_all(&dir);
@@ -365,7 +398,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("flake-info"), "/home/user/config#my-machine\n").unwrap();
-        let cmd = rebuild_cmd(&dir);
+        let cmd = rebuild_cmd(&dir, false);
         let args: Vec<&str> = cmd.get_args().map(|a| a.to_str().unwrap_or("")).collect();
         assert_eq!(
             args,
@@ -431,7 +464,7 @@ mod tests {
         .unwrap();
 
         // Apply with no-rebuild (simulates what happens before nixos-rebuild)
-        let result = execute("test-rollback", false, true, Some(&dir));
+        let result = execute("test-rollback", false, true, false, Some(&dir));
         assert!(result.is_ok());
 
         // Both files should be present with new content
@@ -472,7 +505,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = execute("test-delete", false, true, Some(&dir));
+        let result = execute("test-delete", false, true, false, Some(&dir));
         assert!(result.is_ok());
         assert!(!dir.join("packages/gone.nix").exists());
 

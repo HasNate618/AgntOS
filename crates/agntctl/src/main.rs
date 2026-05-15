@@ -70,6 +70,10 @@ enum Command {
         #[arg(long)]
         no_rebuild: bool,
 
+        /// Persist across reboots (use nixos-rebuild switch instead of test)
+        #[arg(long)]
+        persist: bool,
+
         /// Config directory (default: /etc/agntos)
         #[arg(long)]
         config_dir: Option<PathBuf>,
@@ -344,8 +348,9 @@ fn main() {
             id,
             dry_run,
             no_rebuild,
+            persist,
             config_dir,
-        } => match apply::execute(&id, dry_run, no_rebuild, config_dir.as_ref()) {
+        } => match apply::execute(&id, dry_run, no_rebuild, persist, config_dir.as_ref()) {
             Ok(output) => {
                 print!("{}", output);
             }
@@ -490,8 +495,9 @@ fn main() {
             let result = match action.as_str() {
                 "list" | "list-generations" => rollback::execute_list(config_dir.as_ref()),
                 "apply" | "do" | "" => rollback::execute(config_dir.as_ref()),
+                "undo" | "surgical" => rollback::execute_undo(config_dir.as_ref()),
                 other => Err(format!(
-                    "Unknown rollback action: {}. Use 'list' or 'apply'",
+                    "Unknown rollback action: {}. Use 'list', 'apply', or 'undo'",
                     other
                 )),
             };
