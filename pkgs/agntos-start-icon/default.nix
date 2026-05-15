@@ -25,11 +25,11 @@ stdenvNoCC.mkDerivation {
     cp ${agntos-branding}/share/agntos/logos/agntos.svg \
       $out/share/icons/agntos-start/apps/64/agntos.svg
 
-    # index.theme — inherit all other icons from breeze-dark
+    # index.theme — inherit all other icons from Kora
     cat > $out/share/icons/agntos-start/index.theme << EOF
 [Icon Theme]
 Name=AgntOS
-Inherits=breeze-dark
+Inherits=kora
 Directories=places/64,places/symbolic
 EOF
   '';
