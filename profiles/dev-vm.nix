@@ -133,11 +133,11 @@ SH
 
       # Patch panel background for more transparency (lower opacity)
       for f in panel-background translucentbackground background; do
-        FILE="/home/developer/.local/share/plasma/desktoptheme/Bart/widgets/${f}.svgz"
+        FILE="/home/developer/.local/share/plasma/desktoptheme/Bart/widgets/''${f}.svgz"
         if [ -f "$FILE" ]; then
           zcat < "$FILE" | sed \
             's/stop-opacity:0.49803922/stop-opacity:0.25/g; s/stop-opacity:0.81600001/stop-opacity:0.6/g; s/stop-opacity:0.86000001/stop-opacity:0.5/g; s/stop-opacity:0.875/stop-opacity:0.7/g' \
-            | gzip > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+            | gzip > "''${FILE}.tmp" && mv "''${FILE}.tmp" "$FILE"
         fi
       done
 
