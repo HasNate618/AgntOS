@@ -34,21 +34,33 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
+      libsForQt5.qtstyleplugin-kvantum
+      qt6Packages.qtstyleplugin-kvantum
+      qt5ct
+      qt6ct
     ];
 
-    # Use NixOS Qt module for proper Qt5/Qt6 theming and plugin paths
-    # This sets QT_PLUGIN_PATH, QML2_IMPORT_PATH, QT_QPA_PLATFORMTHEME, and QT_STYLE_OVERRIDE
-    # correctly so Kvantum style plugins are discoverable by both Qt5 and Qt6 apps.
-    qt = {
-      enable = true;
-      platformTheme = "qt5ct";
-      style = "kvantum";
-    };
-
-    # Kvantum theme selection
+    # Ensure system Qt plugin paths are available to all sessions
     environment.sessionVariables = {
       KVANTUM_THEME = "WinSur-dark";
+      QT_PLUGIN_PATH = [ "/run/current-system/sw/lib/qt-6/plugins" "/run/current-system/sw/lib/qt-5.15.15/plugins" ];
     };
+
+    # Write QT_PLUGIN_PATH to /etc/environment so SDDM/Wayland sessions get it
+    system.activationScripts.qt-env = ''
+      cat > /etc/environment << 'ENV'
+QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins:/run/current-system/sw/lib/qt-5.15.15/plugins
+KVANTUM_THEME=WinSur-dark
+ENV
+    '';
+
+    # Kvantum is installed but NOT forced as active style (known crash on Plasma 6)
+    # To test: export QT_STYLE_OVERRIDE=kvantum and launch an app
+    # Apps use Breeze + WinSurDark color scheme by default via kdeglobals
+
+    # Kvantum is installed but NOT forced as the active style (known issue)
+    # To manually enable: export QT_STYLE_OVERRIDE=kvantum before launching apps
+    # Apps use Breeze + WinSurDark color scheme by default
 
     programs.dconf.enable = true;
   };
