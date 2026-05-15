@@ -27,6 +27,7 @@ stdenvNoCC.mkDerivation rec {
     # Plasma desktop theme — copy all, then patch specific SVGs
     mkdir -p $out/share/plasma/desktoptheme
     cp -r $src/plasma/Bart $out/share/plasma/desktoptheme/
+    chmod -R u+w "$out/share/plasma/desktoptheme/Bart"
     for f in panel-background translucentbackground background; do
       DOTFILE="$out/share/plasma/desktoptheme/Bart/widgets/''${f}.svgz"
       [ -f "$DOTFILE" ] || continue
@@ -35,6 +36,15 @@ stdenvNoCC.mkDerivation rec {
         | gzip > /tmp/patched-''${f}.svgz
       chmod u+w "$DOTFILE"
       cp /tmp/patched-''${f}.svgz "$DOTFILE"
+    done
+
+    # Create opaque/translucent/solid directories for Plasma 6 panel rendering
+    for variant in opaque translucent solid; do
+      mkdir -p "$out/share/plasma/desktoptheme/Bart/''${variant}/widgets"
+      for w in panel-background translucentbackground background; do
+        cp "$out/share/plasma/desktoptheme/Bart/widgets/''${w}.svgz" \
+          "$out/share/plasma/desktoptheme/Bart/''${variant}/widgets/"
+      done
     done
 
     # Plasma look-and-feel
