@@ -32,6 +32,7 @@ in {
 
   # ── Hostname ──
 
+  system.nixos.distroName = lib.mkDefault "AgntOS";
   networking.hostName = lib.mkDefault "agntos";
 
   # ── Wallpaper (new users) ──
@@ -152,7 +153,7 @@ in {
 
   boot.plymouth = {
     enable = true;
-    theme = "spinner";
+    theme = "breeze";
     logo = "${pkgs.agntos-branding}/share/agntos/logos/agntos.png";
   };
 
