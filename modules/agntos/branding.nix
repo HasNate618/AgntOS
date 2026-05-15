@@ -56,6 +56,12 @@ in {
 
   # ── KDE Plasma defaults ──
 
+  environment.etc."xdg/ksplashrc".text = ''
+    [KSplash]
+    Engine=KSplashQML
+    Theme=org.kde.breeze.desktop
+  '';
+
   environment.etc."xdg/kdeglobals".text = ''
     [General]
     ColorScheme=BreezeDark
@@ -157,11 +163,14 @@ in {
     logo = "${pkgs.agntos-branding}/share/agntos/logos/agntos.png";
   };
 
-  boot.initrd.kernelModules = [ "bochs" "drm" ];
+  boot.initrd = {
+    kernelModules = [ "bochs" "drm" ];
+    systemd.enable = true;
+    verbose = false;
+  };
 
   # Silent boot — suppress kernel messages for clean Plymouth display
   boot.consoleLogLevel = 3;
-  boot.initrd.verbose = false;
   boot.kernelParams = [
     "quiet"
     "udev.log_level=3"
