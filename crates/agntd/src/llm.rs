@@ -290,12 +290,13 @@ pub fn tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "audit",
-                "description": "Read audit log entries.",
+                "description": "Read or search the audit log for past actions.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["list", "show"] },
+                        "action": { "type": "string", "enum": ["list", "show", "search"] },
                         "id": { "type": "string" },
+                        "query": { "type": "string", "description": "Search term for 'search' action" },
                         "limit": { "type": "integer" }
                     }
                 }

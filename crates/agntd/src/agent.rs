@@ -266,6 +266,25 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                         &cfg,
                     ]))
                 }
+                "search" => {
+                    let query = args.get("query").and_then(|v| v.as_str()).ok_or_else(|| {
+                        "Missing required argument for audit search: query".to_string()
+                    })?;
+                    let limit_arg = args
+                        .get("limit")
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "20".to_string());
+                    command_result(util::run_agntctl(&[
+                        "audit",
+                        "search",
+                        query,
+                        "--limit",
+                        &limit_arg,
+                        "--config-dir",
+                        &cfg,
+                    ]))
+                }
                 _ => {
                     let limit_arg = args
                         .get("limit")

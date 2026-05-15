@@ -49,6 +49,86 @@ pub fn execute_list(
     Ok(out)
 }
 
+pub fn execute_search(
+    query: &str,
+    limit: usize,
+    json: bool,
+    config_dir: Option<&PathBuf>,
+) -> Result<String, String> {
+    let log_path = get_log_path(config_dir);
+    let log = AuditLog::load(&log_path)?;
+
+    let q = query.to_lowercase();
+    let mut matched: Vec<&AuditEntry> = log
+        .entries
+        .iter()
+        .filter(|e| {
+            e.summary.to_lowercase().contains(&q)
+                || e.prompt
+                    .as_deref()
+                    .map_or(false, |p| p.to_lowercase().contains(&q))
+                || e.rationale
+                    .as_deref()
+                    .map_or(false, |r| r.to_lowercase().contains(&q))
+                || e.files_changed
+                    .iter()
+                    .any(|f| f.to_lowercase().contains(&q))
+                || e.files_written
+                    .iter()
+                    .any(|f| f.to_lowercase().contains(&q))
+                || e.files_deleted
+                    .iter()
+                    .any(|f| f.to_lowercase().contains(&q))
+                || e.id.to_lowercase().contains(&q)
+        })
+        .collect();
+
+    matched.reverse();
+    matched.truncate(limit);
+
+    if matched.is_empty() {
+        return Ok(format!("No audit entries found matching '{}'.\n", query));
+    }
+
+    if json {
+        return serde_json::to_string_pretty(&matched)
+            .map_err(|e| format!("Failed to serialize: {}", e));
+    }
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "Audit entries matching '{}' ({} shown):\n\n",
+        query,
+        matched.len()
+    ));
+    for entry in matched {
+        let ts = entry.timestamp.format("%Y-%m-%d %H:%M:%S");
+        let status = match entry.result {
+            AuditResult::Success { .. } => "OK",
+            AuditResult::Failed { .. } => "FAIL",
+            AuditResult::Pending { .. } => "PENDING",
+        };
+        let prompt_snippet = entry
+            .prompt
+            .as_deref()
+            .map(|p| {
+                let truncated: String = p.chars().take(50).collect();
+                if p.len() > 50 {
+                    format!("{}...", truncated)
+                } else {
+                    truncated
+                }
+            })
+            .map(|s| format!(" | Prompt: {}", s))
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "  {} | {} | {:8} | {}{}\n",
+            entry.id, ts, status, entry.summary, prompt_snippet
+        ));
+    }
+    Ok(out)
+}
+
 pub fn execute_show(id: &str, json: bool, config_dir: Option<&PathBuf>) -> Result<String, String> {
     let log_path = get_log_path(config_dir);
     let log = AuditLog::load(&log_path)?;
@@ -335,6 +415,93 @@ mod tests {
         // Default should be None, not an error
         assert!(log.entries[0].prompt.is_none());
         assert!(log.entries[0].rationale.is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_search_by_prompt() {
+        use agnt_common::audit::{audit_id, AuditAction, AuditResult};
+        use chrono::Utc;
+
+        let dir = PathBuf::from("/tmp/agntos-audit-search");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log_path = dir.join("audit.jsonl");
+
+        // Write two entries — one with a relevant prompt, one without
+        let entry_htop = AuditEntry {
+            id: audit_id(),
+            timestamp: Utc::now(),
+            action: AuditAction::Apply {
+                proposal_id: "p1".into(),
+            },
+            actor: "agent".into(),
+            summary: "Applied: Install htop".into(),
+            files_changed: vec!["packages/htop.nix".into()],
+            files_written: vec!["packages/htop.nix".into()],
+            files_deleted: vec![],
+            rollback_hint: None,
+            result: AuditResult::Success { message: None },
+            prompt: Some("Install htop so I can monitor memory usage".into()),
+            rationale: None,
+        };
+        AuditLog::append_to_disk(&log_path, &entry_htop).unwrap();
+
+        let entry_firefox = AuditEntry {
+            id: audit_id(),
+            timestamp: Utc::now(),
+            action: AuditAction::Apply {
+                proposal_id: "p2".into(),
+            },
+            actor: "agent".into(),
+            summary: "Applied: Install firefox".into(),
+            files_changed: vec!["packages/firefox.nix".into()],
+            files_written: vec!["packages/firefox.nix".into()],
+            files_deleted: vec![],
+            rollback_hint: None,
+            result: AuditResult::Success { message: None },
+            prompt: Some("Install a web browser".into()),
+            rationale: None,
+        };
+        AuditLog::append_to_disk(&log_path, &entry_firefox).unwrap();
+
+        // Search by prompt content
+        let result = execute_search("monitor memory", 10, false, Some(&dir)).unwrap();
+        assert!(
+            result.contains("htop"),
+            "should find htop entry: {}",
+            result
+        );
+        assert!(
+            !result.contains("firefox"),
+            "should not find firefox entry: {}",
+            result
+        );
+
+        // Search by summary
+        let result = execute_search("firefox", 10, false, Some(&dir)).unwrap();
+        assert!(
+            result.contains("firefox"),
+            "should find firefox entry: {}",
+            result
+        );
+
+        // Search by file path
+        let result = execute_search("htop.nix", 10, false, Some(&dir)).unwrap();
+        assert!(
+            result.contains("htop"),
+            "should find by file path: {}",
+            result
+        );
+
+        // Search with no matches
+        let result = execute_search("nonexistent", 10, false, Some(&dir)).unwrap();
+        assert!(
+            result.contains("No audit entries found"),
+            "should report no matches: {}",
+            result
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

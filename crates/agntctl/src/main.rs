@@ -88,7 +88,7 @@ enum Command {
     },
     /// View the activity audit log
     Audit {
-        /// Action: list or show <id>
+        /// Action: list, show <id>, or search <query>
         #[arg(default_value = "list")]
         action: String,
 
@@ -96,7 +96,11 @@ enum Command {
         #[arg(required = false)]
         id: Option<String>,
 
-        /// Max entries to show (for "list")
+        /// Search query (for "search")
+        #[arg(required = false)]
+        query: Option<String>,
+
+        /// Max entries to show (for "list" / "search")
         #[arg(long, default_value = "20")]
         limit: usize,
 
@@ -381,6 +385,7 @@ fn main() {
             limit,
             json,
             config_dir,
+            query,
         } => match action.as_str() {
             "list" => match audit::execute_list(limit, json, config_dir.as_ref()) {
                 Ok(output) => print!("{}", output),
@@ -393,8 +398,22 @@ fn main() {
                     Err(e) => eprintln!("Error: {}", e),
                 }
             }
+            "search" => {
+                let q = query.as_deref().unwrap_or("");
+                if q.is_empty() {
+                    eprintln!("Usage: audit search <query>");
+                    std::process::exit(1);
+                }
+                match audit::execute_search(q, limit, json, config_dir.as_ref()) {
+                    Ok(output) => print!("{}", output),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
             other => {
-                eprintln!("Unknown audit action: {}. Use 'list' or 'show <id>'", other);
+                eprintln!(
+                    "Unknown audit action: {}. Use 'list', 'show <id>', or 'search <query>'",
+                    other
+                );
                 std::process::exit(1);
             }
         },
