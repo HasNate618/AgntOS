@@ -59,14 +59,15 @@
     mkdir -p /home/developer/.config/ghostty /home/developer/.config
     chown developer:users /home/developer/.config
     ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
-    # Write complete kdeglobals with all dark theme + icon settings
+
+    # Write complete kdeglobals with WinSur dark + Kora icons + AgntOS fonts
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
 ColorScheme=WinSurDark
-widgetStyle=Breeze
+widgetStyle=kvantum
 TerminalApplication=ghostty
 [Icons]
-Theme=agntos-start
+Theme=kora
 [KDE]
 LookAndFeelPackage=com.github.yeyushengfan258.WinSur-dark
 [Fonts]
@@ -76,9 +77,37 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 [WM]
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
+
+    # Set WinSur window decorations and desktop theme
+    cat > /home/developer/.config/kwinrc << 'KWI'
+[org.kde.kdecoration2]
+library=org.kde.kwin.aurorae
+theme=__aurorae__svg__WinSur-dark
+KWI
+    cat > /home/developer/.config/plasmarc << 'PLA'
+[Theme]
+name=WinSur-dark
+PLA
+
+    # Set Kvantum theme for transparency
+    mkdir -p /home/developer/.config/Kvantum
+    cat > /home/developer/.config/Kvantum/kvantum.kvconfig << 'KVN'
+[General]
+theme=WinSur-dark
+KVN
+
+    # Override start button icon with AgntOS logo
+    mkdir -p /home/developer/.local/share/icons/places/64
+    cp ${pkgs.agntos-branding}/share/agntos/logos/agntos.svg \
+      /home/developer/.local/share/icons/places/64/start-here-kde-plasma.svg
+
     # Set splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
-    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals /home/developer/.config/ksplashrc
+
+    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals \
+      /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
+      /home/developer/.config/plasmarc /home/developer/.config/Kvantum \
+      /home/developer/.local/share/icons
   '';
 
   systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce

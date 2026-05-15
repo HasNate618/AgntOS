@@ -34,6 +34,7 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
+      kdePackages.qtstyleplugin-kvantum
     ];
 
     programs.dconf.enable = true;
