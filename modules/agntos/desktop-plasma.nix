@@ -30,6 +30,7 @@ in {
       konsole
       dolphin
       plasma-systemmonitor
+      papirus-icon-theme
     ];
 
     programs.dconf.enable = true;

@@ -7,7 +7,7 @@ in {
 
   imports = [ "${modulesPath}/virtualisation/qemu-vm.nix" ];
 
-  boot.kernelParams = [ "console=ttyS0" ];
+  boot.kernelParams = [ "console=tty0" "console=ttyS0" ];
 
   virtualisation = {
     memorySize = 8192;
