@@ -51,6 +51,7 @@
       alias agnt-agent="cd /mnt/agntos-src && cargo run --bin agntd"
       alias agnt-fetch="fastfetch --config /etc/agntos/fastfetch-config.jsonc"
       export PATH="/mnt/agntos-src/target/release:$PATH"
+      export QT_STYLE_OVERRIDE=kvantum
       echo "AgntOS dev ready: agnt-build | agnt-inspect | agnt-fetch"
     fi
   '';
@@ -78,11 +79,13 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
 
-    # Set WinSur window decorations and desktop theme
+    # Set WinSur window decorations, blur effect, and compositing
     cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
 theme=__aurorae__svg__WinSur-dark
+[Effect-Blur]
+Enabled=true
 KWI
     cat > /home/developer/.config/plasmarc << 'PLA'
 [Theme]
@@ -96,10 +99,10 @@ PLA
 theme=WinSur-dark
 KVN
 
-    # Override start button icon with AgntOS logo
-    mkdir -p /home/developer/.local/share/icons/places/64
+    # Override start button icon with AgntOS logo (XDG hicolor path)
+    mkdir -p /home/developer/.local/share/icons/hicolor/64x64/places
     cp ${pkgs.agntos-branding}/share/agntos/logos/agntos.svg \
-      /home/developer/.local/share/icons/places/64/start-here-kde-plasma.svg
+      /home/developer/.local/share/icons/hicolor/64x64/places/start-here-kde-plasma.svg
 
     # Set splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
@@ -107,7 +110,7 @@ KVN
     chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals \
       /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
       /home/developer/.config/plasmarc /home/developer/.config/Kvantum \
-      /home/developer/.local/share/icons
+      /home/developer/.local/share
   '';
 
   systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce
