@@ -36,8 +36,8 @@ in {
       winsur-kde
       libsForQt5.qtstyleplugin-kvantum
       qt6Packages.qtstyleplugin-kvantum
-      qt5ct
-      qt6ct
+      libsForQt5.qt5ct
+      qt6Packages.qt6ct
     ];
 
     # Ensure system Qt plugin paths are available to all sessions
