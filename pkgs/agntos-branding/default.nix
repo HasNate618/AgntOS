@@ -19,14 +19,14 @@ stdenvNoCC.mkDerivation {
     install -m 644 ${./logo/agntos-ascii.txt} $out/share/agntos/logo.txt
 
     # KDE splash theme
-    mkdir -p $out/share/plasma/look-and-feel/agntos-splash/contents/images
-    mkdir -p $out/share/plasma/look-and-feel/agntos-splash/contents/previews
+    mkdir -p $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images
     install -m 644 ${./splash/metadata.desktop} $out/share/plasma/look-and-feel/agntos-splash/metadata.desktop
-    install -m 644 ${./splash/contents/Splash.qml} $out/share/plasma/look-and-feel/agntos-splash/contents/Splash.qml
-    install -m 644 ${./splash/contents/images/background.png} $out/share/plasma/look-and-feel/agntos-splash/contents/images/background.png
-    install -m 644 ${./splash/contents/images/logo.png} $out/share/plasma/look-and-feel/agntos-splash/contents/images/logo.png
-    # Use wallpaper as preview
-    install -m 644 ${./splash/contents/images/background.png} $out/share/plasma/look-and-feel/agntos-splash/contents/previews/splash.png
+    install -m 644 ${./splash/contents/splash/Splash.qml} $out/share/plasma/look-and-feel/agntos-splash/contents/splash/Splash.qml
+    install -m 644 ${./splash/contents/splash/images/background.png} $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images/background.png
+    install -m 644 ${./splash/contents/splash/images/logo.png} $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images/logo.png
+    # Preview
+    mkdir -p $out/share/plasma/look-and-feel/agntos-splash/contents/previews
+    install -m 644 ${./splash/contents/splash/images/background.png} $out/share/plasma/look-and-feel/agntos-splash/contents/previews/splash.png
 
     # Plymouth theme
     mkdir -p $out/share/plymouth/themes/agntos
