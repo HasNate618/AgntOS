@@ -39,7 +39,7 @@ in {
     # Use NixOS Qt module for proper Qt5/Qt6 theming and plugin paths
     # This sets QT_PLUGIN_PATH, QML2_IMPORT_PATH, QT_QPA_PLATFORMTHEME, and QT_STYLE_OVERRIDE
     # correctly so Kvantum style plugins are discoverable by both Qt5 and Qt6 apps.
-    programs.qt = {
+    qt = {
       enable = true;
       platformTheme = "qt5ct";
       style = "kvantum";
