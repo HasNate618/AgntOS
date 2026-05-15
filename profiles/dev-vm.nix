@@ -104,12 +104,11 @@ NoDisplay=true
 DESK
     cat > /home/developer/.config/autostart/agntos-config.sh << 'SH'
 #!/usr/bin/env bash
-sleep 2
-# Apply WinSur window decorations
-kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "theme" "__aurorae__svg__WinSur-dark"
-kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "library" "org.kde.kwin.aurorae"
-# Enable blur
-kwriteconfig6 --file kwinrc --group "Effect-Blur" --key "Enabled" true
+sleep 3
+# Apply WinSur look-and-feel (official KDE way — works when display is available)
+plasma-apply-lookandfeel -a com.github.yeyushengfan258.WinSur-dark 2>/dev/null
+# Enable blur effect
+qdbus6 org.kde.kwin /Effects org.kde.kwin.Effects.loadEffect blur 2>/dev/null
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
