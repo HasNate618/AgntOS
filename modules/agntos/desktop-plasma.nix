@@ -34,7 +34,14 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
+      qtstyleplugin-kvantum
     ];
+
+    # Enable Kvantum Qt6 style for application transparency
+    environment.sessionVariables = {
+      QT_STYLE_OVERRIDE = "kvantum";
+      KVANTUM_THEME = "WinSur-dark";
+    };
 
     programs.dconf.enable = true;
   };
