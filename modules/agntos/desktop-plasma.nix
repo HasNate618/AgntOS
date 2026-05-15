@@ -34,6 +34,8 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
+      # Kvantum for both Qt5 and Qt6 app transparency
+      libsForQt5.qtstyleplugin-kvantum
       qt6Packages.qtstyleplugin-kvantum
     ];
 
