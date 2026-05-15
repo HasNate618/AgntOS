@@ -29,8 +29,10 @@ stdenvNoCC.mkDerivation {
     cat > $out/share/icons/agntos-start/index.theme << EOF
 [Icon Theme]
 Name=AgntOS
+Comment=AgntOS start button icon
 Inherits=kora
-Directories=places/64,places/symbolic
+Example=start-here-kde-plasma
+Directories=places/16,places/22,places/24,places/32,places/48,places/64,places/96,places/128,places/256,places/symbolic
 EOF
   '';
 

@@ -66,7 +66,7 @@ ColorScheme=WinSurDark
 widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
-Theme=kora
+Theme=agntos-start
 [KDE]
 LookAndFeelPackage=com.github.yeyushengfan258.WinSur-dark
 [Fonts]
