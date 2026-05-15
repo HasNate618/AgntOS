@@ -51,7 +51,6 @@
       alias agnt-agent="cd /mnt/agntos-src && cargo run --bin agntd"
       alias agnt-fetch="fastfetch --config /etc/agntos/fastfetch-config.jsonc"
       export PATH="/mnt/agntos-src/target/release:$PATH"
-      export QT_STYLE_OVERRIDE=kvantum
       echo "AgntOS dev ready: agnt-build | agnt-inspect | agnt-fetch"
     fi
   '';
@@ -92,17 +91,32 @@ KWI
 name=WinSur-dark
 PLA
 
-    # Set Kvantum theme for transparency
-    mkdir -p /home/developer/.config/Kvantum
+    # Kvantum theme for transparency — apply at login via autostart
+    mkdir -p /home/developer/.config/Kvantum /home/developer/.config/autostart
     cat > /home/developer/.config/Kvantum/kvantum.kvconfig << 'KVN'
 [General]
 theme=WinSur-dark
 KVN
-
-    # Override start button icon with AgntOS logo (XDG hicolor path)
-    mkdir -p /home/developer/.local/share/icons/hicolor/64x64/places
-    cp ${pkgs.agntos-branding}/share/agntos/logos/agntos.svg \
-      /home/developer/.local/share/icons/hicolor/64x64/places/start-here-kde-plasma.svg
+    cat > /home/developer/.config/autostart/agntos-config.desktop << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=AgntOS Config
+Exec=/home/developer/.config/autostart/agntos-config.sh
+X-KDE-autostart-phase=2
+NoDisplay=true
+DESK
+    cat > /home/developer/.config/autostart/agntos-config.sh << 'SH'
+#!/usr/bin/env bash
+sleep 2
+# Apply WinSur window decorations
+kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "theme" "__aurorae__svg__WinSur-dark"
+kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "library" "org.kde.kwin.aurorae"
+# Enable blur
+kwriteconfig6 --file kwinrc --group "Effect-Blur" --key "Enabled" true
+# Apply Kvantum theme
+kvantummanager --set WinSur-dark 2>/dev/null || true
+SH
+    chmod +x /home/developer/.config/autostart/agntos-config.sh
 
     # Set splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
@@ -110,6 +124,7 @@ KVN
     chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals \
       /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
       /home/developer/.config/plasmarc /home/developer/.config/Kvantum \
+      /home/developer/.config/autostart \
       /home/developer/.local/share
   '';
 
