@@ -40,23 +40,33 @@ in {
       qt6Packages.qt6ct
     ];
 
-    # Ensure system Qt plugin paths are available to all sessions
+    # Kvantum via qt5ct platform theme (bypasses KDE theme loading issues)
     environment.sessionVariables = {
       KVANTUM_THEME = "WinSur-dark";
+      QT_STYLE_OVERRIDE = "kvantum";
+      QT_QPA_PLATFORMTHEME = "qt5ct";
       QT_PLUGIN_PATH = [ "/run/current-system/sw/lib/qt-6/plugins" "/run/current-system/sw/lib/qt-5.15.15/plugins" ];
     };
 
-    # Write QT_PLUGIN_PATH to /etc/environment so SDDM/Wayland sessions get it
+    # Config files for qt5ct and qt6ct (used when QT_QPA_PLATFORMTHEME=qt5ct)
     system.activationScripts.qt-env = ''
       cat > /etc/environment << 'ENV'
 QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins:/run/current-system/sw/lib/qt-5.15.15/plugins
+QT_QPA_PLATFORMTHEME=qt5ct
+QT_STYLE_OVERRIDE=kvantum
 KVANTUM_THEME=WinSur-dark
 ENV
-    '';
 
-    # Kvantum is installed but NOT forced as active style (known crash on Plasma 6)
-    # To test: export QT_STYLE_OVERRIDE=kvantum and launch an app
-    # Apps use Breeze + WinSurDark color scheme by default via kdeglobals
+      mkdir -p /home/developer/.config/qt5ct /home/developer/.config/qt6ct
+      cat > /home/developer/.config/qt5ct/qt5ct.conf << 'CFG'
+[Appearance]
+style=kvantum
+color_scheme_path=
+icon_theme=agntos-start
+CFG
+      cp /home/developer/.config/qt5ct/qt5ct.conf /home/developer/.config/qt6ct/qt6ct.conf
+      chown -R developer:users /home/developer/.config/qt5ct /home/developer/.config/qt6ct
+    '';
 
     # Kvantum is installed but NOT forced as the active style (known issue)
     # To manually enable: export QT_STYLE_OVERRIDE=kvantum before launching apps
