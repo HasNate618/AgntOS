@@ -113,7 +113,7 @@ SH
     # Set splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
 
-    # Clear Plasma theme cache so patched SVGs are re-read
+    # Clear stale cache
     rm -f /home/developer/.cache/plasma_theme_Bart.kcache
     rm -f /home/developer/.cache/icon-cache.kcache
 
