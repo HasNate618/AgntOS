@@ -61,23 +61,22 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
     if lower.starts_with("install ") {
         let rest = lower.strip_prefix("install ").unwrap().trim();
         let package = sanitize_package_name(rest);
+        let file_path = format!("packages/{}.nix", package);
         Ok(ConfigProposal {
             id,
             summary: format!("Install package: {}", package),
-            nix_changes: format!(
-                "environment.systemPackages = [ pkgs.{} ];",
-                package
-            ),
+            nix_changes: format!("Add pkgs.{} to environment.systemPackages", package),
             files_to_write: vec![(
-                "packages.nix".to_string(),
+                file_path.clone(),
                 format!(
-                    "{{ config, pkgs, ... }}: {{\n  environment.systemPackages = [ pkgs.{} ];\n}}",
+                    "{{ config, lib, pkgs, ... }}: {{\n  environment.systemPackages = lib.mkAfter [ pkgs.{} ];\n}}\n",
                     package
                 ),
             )],
+            files_to_delete: vec![],
             rollback_guidance: format!(
-                "To rollback: remove `{}` from environment.systemPackages in packages.nix, then run `nixos-rebuild switch`.",
-                package
+                "To rollback: delete {} or run `agntctl propose remove {}`.",
+                file_path, package
             ),
         })
     } else if lower.starts_with("remove ") || lower.starts_with("uninstall ") {
@@ -87,22 +86,18 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
             "uninstall "
         };
         let package = sanitize_package_name(lower.strip_prefix(prefix).unwrap().trim());
+        let file_path = format!("packages/{}.nix", package);
         Ok(ConfigProposal {
             id,
             summary: format!("Remove package: {}", package),
             nix_changes: format!(
-                "Remove `pkgs.{}` from environment.systemPackages (or comment the line).",
-                package
+                "Delete {} (removes pkgs.{} from environment.systemPackages)",
+                file_path, package
             ),
-            files_to_write: vec![(
-                "packages.nix".to_string(),
-                format!(
-                    "{{ config, pkgs, ... }}: {{\n  # Removed: {}\n  environment.systemPackages = [  ];\n}}",
-                    package
-                ),
-            )],
+            files_to_write: vec![],
+            files_to_delete: vec![file_path.clone()],
             rollback_guidance: format!(
-                "To rollback: re-add `{}` to environment.systemPackages, then run `nixos-rebuild switch`. See audit log.",
+                "To rollback: run `agntctl propose install {}` to re-create the module.",
                 package
             ),
         })
@@ -123,6 +118,7 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
                     services_path
                 ),
             )],
+            files_to_delete: vec![],
             rollback_guidance: format!(
                 "To rollback: set `services.{}.enable = false`, then run `nixos-rebuild switch`.",
                 services_path
@@ -145,6 +141,7 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
                     services_path
                 ),
             )],
+            files_to_delete: vec![],
             rollback_guidance: format!(
                 "To rollback: set `services.{}.enable = true`, then run `nixos-rebuild switch`.",
                 services_path
@@ -165,6 +162,7 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
                     description
                 ),
             )],
+            files_to_delete: vec![],
             rollback_guidance: "Check the audit log before rolling back custom changes."
                 .to_string(),
         })
@@ -199,14 +197,18 @@ mod tests {
         let p = generate("install firefox").unwrap();
         assert!(p.summary.contains("firefox"));
         assert!(p.nix_changes.contains("pkgs.firefox"));
-        assert_eq!(p.files_to_write[0].0, "packages.nix");
+        assert_eq!(p.files_to_write[0].0, "packages/firefox.nix");
+        assert!(p.files_to_write[0].1.contains("lib.mkAfter"));
+        assert!(p.files_to_delete.is_empty());
     }
 
     #[test]
     fn test_generate_remove() {
         let p = generate("remove firefox").unwrap();
         assert!(p.summary.contains("firefox"));
-        assert!(p.nix_changes.contains("Remove"));
+        assert!(p.nix_changes.contains("Delete"));
+        assert!(p.files_to_write.is_empty());
+        assert_eq!(p.files_to_delete, vec!["packages/firefox.nix"]);
     }
 
     #[test]

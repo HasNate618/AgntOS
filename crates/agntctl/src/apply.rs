@@ -66,6 +66,26 @@ pub fn execute(
         written_files.push(filepath.display().to_string());
     }
 
+    // Delete files marked for removal
+    for filename in &proposal.files_to_delete {
+        let filepath = dir.join(filename);
+        if dry_run {
+            out.push_str(&format!("  Would delete: {}\n", filepath.display()));
+        } else {
+            if filepath.exists() {
+                std::fs::remove_file(&filepath)
+                    .map_err(|e| format!("Failed to delete {}: {}", filepath.display(), e))?;
+                out.push_str(&format!("  Deleted:     {}\n", filepath.display()));
+                written_files.push(filepath.display().to_string());
+            } else {
+                out.push_str(&format!(
+                    "  Skip delete: {} (not found)\n",
+                    filepath.display()
+                ));
+            }
+        }
+    }
+
     // Run nixos-rebuild (unless --no-rebuild or --dry-run)
     if !dry_run && !no_rebuild {
         let mut rebuild_result = rebuild_cmd(&dir);
@@ -200,6 +220,7 @@ mod tests {
                 "{ config, pkgs, ... }: {\n  environment.systemPackages = [ pkgs.hello ];\n}"
                     .to_string(),
             )],
+            files_to_delete: vec![],
             rollback_guidance: "Remove hello from packages.nix.".to_string(),
         };
         let json = serde_json::to_string_pretty(&proposal).unwrap();

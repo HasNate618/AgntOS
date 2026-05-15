@@ -1,6 +1,34 @@
 { config, pkgs, lib, ... }:
 
+let
+  cfgDir = "/etc/agntos";
+  packagesDir = "${cfgDir}/packages";
+  servicesDir = "${cfgDir}/services";
+
+  optionalImport = path: lib.optional (builtins.pathExists path) path;
+
+  dirImports = dir:
+    if builtins.pathExists dir then
+      let
+        entries = builtins.readDir dir;
+      in
+      map (name: "${dir}/${name}")
+      (lib.attrNames (lib.filterAttrs (name: kind:
+        (kind == "regular" || kind == "symlink") && lib.hasSuffix ".nix" name
+      ) entries))
+    else
+      [ ];
+
+  packagesImports = dirImports packagesDir;
+  serviceImports = dirImports servicesDir;
+in
+
 {
+  imports =
+    packagesImports
+    ++ optionalImport "${cfgDir}/custom.nix"
+    ++ serviceImports;
+
   options.agntos = {
     enable = lib.mkEnableOption "AgntOS AI-native system extensions";
 
@@ -38,7 +66,9 @@
       # Create AgntOS config directory tree
       systemd.tmpfiles.rules = [
         "d ${config.agntos.configDir} 0755 root root -"
+        "d ${config.agntos.configDir}/packages 0755 root root -"
         "d ${config.agntos.configDir}/proposals 0755 root root -"
+        "d ${config.agntos.configDir}/services 0755 root root -"
         "d ${config.agntos.configDir}/memory 0755 root root -"
         "f ${config.agntos.configDir}/memory/MEMORY.md 0644 root root -"
         "f ${config.agntos.configDir}/memory/USER.md 0644 root root -"
