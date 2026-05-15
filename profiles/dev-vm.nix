@@ -57,15 +57,25 @@
 
   system.activationScripts.ghostty-config = ''
     mkdir -p /home/developer/.config/ghostty /home/developer/.config
+    chown developer:users /home/developer/.config
     ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
-    grep -q 'TerminalApplication' /home/developer/.config/kdeglobals 2>/dev/null || \
-      sed -i '/^\[General\]/a TerminalApplication=ghostty' /home/developer/.config/kdeglobals 2>/dev/null || \
-      printf '[General]\nTerminalApplication=ghostty\n' >> /home/developer/.config/kdeglobals
+    # Write complete kdeglobals with all dark theme + icon settings
+    cat > /home/developer/.config/kdeglobals << 'KDE'
+[General]
+ColorScheme=BreezeDark
+widgetStyle=Breeze
+TerminalApplication=ghostty
+[Icons]
+Theme=kora
+[Fonts]
+fixed=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
+General=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0
+small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
+[WM]
+activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
+KDE
     # Set splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
-    # Set icon theme
-    sed -i '/^\[Icons\]/,/^\[/{s/Theme=.*/Theme=agntos-start/;}' /home/developer/.config/kdeglobals 2>/dev/null || \
-      printf '\n[Icons]\nTheme=agntos-start\n' >> /home/developer/.config/kdeglobals
     chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals /home/developer/.config/ksplashrc
   '';
 
