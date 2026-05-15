@@ -67,9 +67,7 @@ ColorScheme=WinSurDark
 widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
-Theme=kora
-[KDE]
-LookAndFeelPackage=com.github.yeyushengfan258.WinSur-dark
+Theme=agntos-start
 [Fonts]
 fixed=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
 General=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0
@@ -105,11 +103,10 @@ DESK
     cat > /home/developer/.config/autostart/agntos-config.sh << 'SH'
 #!/usr/bin/env bash
 sleep 2
-# Apply WinSur window decorations
-kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "theme" "__aurorae__svg__WinSur-dark"
-kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "library" "org.kde.kwin.aurorae"
-# Enable blur
-kwriteconfig6 --file kwinrc --group "Effect-Blur" --key "Enabled" true
+# Apply WinSur desktop theme, color scheme, and blur
+plasma-apply-desktoptheme WinSur-dark 2>/dev/null
+plasma-apply-colorscheme WinSurDark 2>/dev/null
+qdbus org.kde.KWin /Effects loadEffect "blur" 2>/dev/null
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
