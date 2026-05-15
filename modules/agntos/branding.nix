@@ -156,9 +156,6 @@ in {
     logo = "${pkgs.agntos-branding}/share/agntos/logos/agntos.png";
   };
 
-  # Required for QEMU VGA to show Plymouth graphics
-  boot.initrd.kernelModules = [ "bochs-drm" ];
-
   # ── System packages ──
 
   environment.systemPackages = with pkgs; [
