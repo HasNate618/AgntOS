@@ -62,11 +62,13 @@
     # Write complete kdeglobals with all dark theme + icon settings
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
-ColorScheme=BreezeDark
+ColorScheme=WinSurDark
 widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
 Theme=kora
+[KDE]
+LookAndFeelPackage=com.github.yeyushengfan258.WinSur-dark
 [Fonts]
 fixed=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
 General=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0
