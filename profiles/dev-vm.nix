@@ -109,10 +109,13 @@ sleep 3
 plasma-apply-lookandfeel -a com.github.yeyushengfan258.WinSur-dark 2>/dev/null
 # Re-apply our custom settings that look-and-feel overrides
 # Kora icons (look-and-feel sets its own icon theme)
-kwriteconfig6 --file kdeglobals --group Icons --key Theme kora
-plasma-apply-colorscheme WinSurDark 2>/dev/null
-# Enable blur effect
-qdbus6 org.kde.kwin /Effects org.kde.kwin.Effects.loadEffect blur 2>/dev/null
+kwriteconfig6 --file kdeglobals --group Icons --key Theme kora 2>/dev/null || \
+  sed -i 's/^Theme=.*/Theme=kora/' ~/.config/kdeglobals
+# WinSurDark color scheme
+plasma-apply-colorscheme WinSurDark 2>/dev/null || true
+# Enable blur
+qdbus6 org.kde.kwin /Effects org.kde.kwin.Effects.loadEffect blur 2>/dev/null || \
+  kwriteconfig6 --file kwinrc --group Effect-Blur --key Enabled true 2>/dev/null || true
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
