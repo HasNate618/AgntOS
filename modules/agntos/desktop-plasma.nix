@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }:
 
 let
-  wallpaperPath = "${pkgs.agntos-branding}/share/wallpapers/agntos/default.png";
+  wallpaperPath = "${pkgs.agntos-wallpapers}/share/wallpapers/agntos/philip-oroni-Vc1KXF3TF9g-unsplash.jpg";
 
   # Custom SDDM theme: Breeze but with our wallpaper
   sddmTheme = pkgs.stdenvNoCC.mkDerivation {
