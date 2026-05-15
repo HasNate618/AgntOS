@@ -43,6 +43,13 @@ in {
       KVANTUM_THEME = "WinSur-dark";
     };
 
+    # SDDM reads /etc/environment via PAM — ensure it gets QT_PLUGIN_PATH
+    environment.etc."environment".text = ''
+      QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins
+      QT_STYLE_OVERRIDE=kvantum
+      KVANTUM_THEME=WinSur-dark
+    '';
+
     programs.dconf.enable = true;
   };
 }
