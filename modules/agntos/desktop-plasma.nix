@@ -34,7 +34,7 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
-      qtstyleplugin-kvantum
+      qt6Packages.qtstyleplugin-kvantum
     ];
 
     # Enable Kvantum Qt6 style for application transparency
