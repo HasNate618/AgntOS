@@ -25,11 +25,6 @@ in {
     services.desktopManager.plasma6.enable = true;
     services.xserver.enable = true;
 
-    # Ensure Kvantum is used as the Qt application style
-    environment.sessionVariables = {
-      QT_STYLE_OVERRIDE = "kvantum";
-    };
-
     environment.systemPackages = with pkgs; [
       sddmTheme
       konsole
@@ -39,7 +34,6 @@ in {
       kora-icon-theme
       agntos-start-icon
       winsur-kde
-      kdePackages.qtstyleplugin-kvantum
     ];
 
     programs.dconf.enable = true;

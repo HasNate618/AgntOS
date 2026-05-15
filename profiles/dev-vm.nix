@@ -64,7 +64,7 @@
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
 ColorScheme=WinSurDark
-widgetStyle=kvantum
+widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
 Theme=kora
@@ -91,12 +91,9 @@ KWI
 name=WinSur-dark
 PLA
 
-    # Kvantum theme for transparency — apply at login via autostart
-    mkdir -p /home/developer/.config/Kvantum /home/developer/.config/autostart
-    cat > /home/developer/.config/Kvantum/kvantum.kvconfig << 'KVN'
-[General]
-theme=WinSur-dark
-KVN
+    # Kvantum — removed, crashes Qt apps. Using Breeze + WinSur color scheme instead.
+    # KWin decorations and blur applied via autostart
+    mkdir -p /home/developer/.config/autostart
     cat > /home/developer/.config/autostart/agntos-config.desktop << 'DESK'
 [Desktop Entry]
 Type=Application
@@ -113,8 +110,6 @@ kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "theme" "__auro
 kwriteconfig6 --file kwinrc --group "org.kde.kdecoration2" --key "library" "org.kde.kwin.aurorae"
 # Enable blur
 kwriteconfig6 --file kwinrc --group "Effect-Blur" --key "Enabled" true
-# Apply Kvantum theme
-kvantummanager --set WinSur-dark 2>/dev/null || true
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
@@ -123,7 +118,7 @@ SH
 
     chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals \
       /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
-      /home/developer/.config/plasmarc /home/developer/.config/Kvantum \
+      /home/developer/.config/plasmarc \
       /home/developer/.config/autostart \
       /home/developer/.local/share
   '';
