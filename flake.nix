@@ -12,6 +12,7 @@
       agntos-branding = final.callPackage ./pkgs/agntos-branding { };
       agntos-fonts = final.callPackage ./pkgs/agntos-fonts { };
       agntos-start-icon = final.callPackage ./pkgs/agntos-start-icon { };
+      bart-kde = final.callPackage ./pkgs/bart-kde { };
       winsur-kde = final.callPackage ./pkgs/winsur-kde { };
     };
   in {
@@ -49,7 +50,7 @@
         overlays = [ agntosOverlay ];
       };
     in {
-      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon winsur-kde;
+      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon bart-kde winsur-kde;
     };
   };
 }
