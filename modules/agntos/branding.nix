@@ -150,9 +150,14 @@ in {
 
   # ── Boot splash (Plymouth) ──
 
-  boot.plymouth.enable = true;
-  boot.plymouth.theme = "agntos";
-  boot.plymouth.themePackages = [ pkgs.agntos-branding ];
+  boot.plymouth = {
+    enable = true;
+    theme = "spinner";
+    logo = "${pkgs.agntos-branding}/share/agntos/logos/agntos.png";
+  };
+
+  # Required for QEMU VGA to show Plymouth graphics
+  boot.initrd.kernelModules = [ "bochs-drm" ];
 
   # ── System packages ──
 
