@@ -107,6 +107,10 @@ DESK
 sleep 3
 # Apply WinSur look-and-feel (official KDE way — works when display is available)
 plasma-apply-lookandfeel -a com.github.yeyushengfan258.WinSur-dark 2>/dev/null
+# Re-apply our custom settings that look-and-feel overrides
+# Kora icons (look-and-feel sets its own icon theme)
+kwriteconfig6 --file kdeglobals --group Icons --key Theme kora
+plasma-apply-colorscheme WinSurDark 2>/dev/null
 # Enable blur effect
 qdbus6 org.kde.kwin /Effects org.kde.kwin.Effects.loadEffect blur 2>/dev/null
 SH
