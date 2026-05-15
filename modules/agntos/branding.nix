@@ -156,6 +156,8 @@ in {
     logo = "${pkgs.agntos-branding}/share/agntos/logos/agntos.png";
   };
 
+  boot.initrd.kernelModules = [ "bochs" ];
+
   # ── System packages ──
 
   environment.systemPackages = with pkgs; [
