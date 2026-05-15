@@ -33,23 +33,17 @@ in {
       papirus-icon-theme
       kora-icon-theme
       agntos-start-icon
-      winsur-kde
-      libsForQt5.qtstyleplugin-kvantum
-      qt6Packages.qtstyleplugin-kvantum
-      libsForQt5.qt5ct
-      qt6Packages.qt6ct
+      bart-kde
     ];
 
-    # Kvantum — installed but NOT forced (crashes Plasma 6 on NixOS 24.11)
+    # Qt plugin path for theme discovery
     environment.sessionVariables = {
-      KVANTUM_THEME = "WinSur-dark";
       QT_PLUGIN_PATH = [ "/run/current-system/sw/lib/qt-6/plugins" "/run/current-system/sw/lib/qt-5.15.15/plugins" ];
     };
 
     system.activationScripts.qt-env = ''
       cat > /etc/environment << 'ENV'
 QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins:/run/current-system/sw/lib/qt-5.15.15/plugins
-KVANTUM_THEME=WinSur-dark
 ENV
     '';
 

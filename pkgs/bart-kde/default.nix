@@ -8,7 +8,7 @@ stdenvNoCC.mkDerivation rec {
     owner = "jomada";
     repo = "bart";
     rev = "main";
-    sha256 = lib.fakeHash;
+    sha256 = "ip4Nk3EUGyjxcvng+IFEh8XP3A8aUFymqiXJCqHYDDM=";
   };
 
   dontBuild = true;

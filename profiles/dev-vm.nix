@@ -63,7 +63,7 @@
     # Write complete kdeglobals with WinSur dark + Kora icons + AgntOS fonts
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
-ColorScheme=WinSurDark
+ColorScheme=Bart
 widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
@@ -76,20 +76,20 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
 
-    # Set WinSur window decorations, blur effect, and compositing
+    # Set Bart window decorations, blur effect, and compositing
     cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
-theme=__aurorae__svg__WinSur-dark
+theme=Bart
 [Effect-Blur]
 Enabled=true
 KWI
     cat > /home/developer/.config/plasmarc << 'PLA'
 [Theme]
-name=WinSur-dark
+name=Bart
 PLA
 
-    # Kvantum — removed, crashes Qt apps. Using Breeze + WinSur color scheme instead.
+    # No Kvantum — uses Breeze widget style with Bart color scheme
     # KWin decorations and blur applied via autostart
     mkdir -p /home/developer/.config/autostart
     cat > /home/developer/.config/autostart/agntos-config.desktop << 'DESK'
@@ -103,9 +103,9 @@ DESK
     cat > /home/developer/.config/autostart/agntos-config.sh << 'SH'
 #!/usr/bin/env bash
 sleep 2
-# Apply WinSur desktop theme, color scheme, and blur
-plasma-apply-desktoptheme WinSur-dark 2>/dev/null
-plasma-apply-colorscheme WinSurDark 2>/dev/null
+# Apply Bart desktop theme, color scheme, and blur
+plasma-apply-desktoptheme Bart 2>/dev/null
+plasma-apply-colorscheme Bart 2>/dev/null
 qdbus org.kde.KWin /Effects loadEffect "blur" 2>/dev/null
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
