@@ -61,11 +61,10 @@
     ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
 
     # kdeglobals: WinSur colors + agntos-start icons + AgntOS fonts
-    # agntos-start inherits Kora and overrides only the start-menu icon
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
 ColorScheme=WinSurDark
-widgetStyle=kvantum
+widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
 Theme=agntos-start
@@ -85,13 +84,6 @@ theme=__aurorae__svg__WinSur-dark
 [Effect-Blur]
 Enabled=true
 KWI
-
-    # Kvantum theme config
-    mkdir -p /home/developer/.config/Kvantum
-    cat > /home/developer/.config/Kvantum/kvantum.kvconfig << 'KVN'
-[General]
-theme=WinSur-dark
-KVN
 
     # Plasma desktop theme
     cat > /home/developer/.config/plasmarc << 'PLA'

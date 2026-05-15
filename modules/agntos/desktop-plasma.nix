@@ -41,15 +41,15 @@ in {
 
     # Enable Kvantum Qt6 style for application transparency
     environment.sessionVariables = {
-      QT_STYLE_OVERRIDE = "kvantum";
       KVANTUM_THEME = "WinSur-dark";
     };
 
-    # SDDM reads /etc/environment via PAM — ensure it gets QT_PLUGIN_PATH
-    environment.etc."environment".text = ''
-      QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins
-      QT_STYLE_OVERRIDE=kvantum
-      KVANTUM_THEME=WinSur-dark
+    # SDDM reads /etc/environment via PAM — ensure it gets plugin path
+    system.activationScripts.qt-env = ''
+      cat > /etc/environment << 'ENV'
+QT_PLUGIN_PATH=/run/current-system/sw/lib/qt-6/plugins
+KVANTUM_THEME=WinSur-dark
+ENV
     '';
 
     programs.dconf.enable = true;
