@@ -148,6 +148,12 @@ in {
     window-padding-y = 8
   '';
 
+  # ── Boot splash (Plymouth) ──
+
+  boot.plymouth.enable = true;
+  boot.plymouth.theme = "agntos";
+  boot.plymouth.themePackages = [ pkgs.agntos-branding ];
+
   # ── System packages ──
 
   environment.systemPackages = with pkgs; [

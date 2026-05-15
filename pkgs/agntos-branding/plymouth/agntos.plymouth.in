@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=AgntOS
+Description=AgntOS boot splash — black background, logo, thin white progress bar
+ModuleName=script
+
+[script]
+ImageDir=@out@
+ScriptFile=@out@/agntos.script

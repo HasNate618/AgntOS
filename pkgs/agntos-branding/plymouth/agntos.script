@@ -1,0 +1,51 @@
+# AgntOS Plymouth boot splash
+# Apple-style: black background, centered logo, thin white progress bar
+
+Window.SetBackgroundTopColor(0.078, 0.078, 0.086);
+Window.SetBackgroundBottomColor(0.078, 0.078, 0.086);
+
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
+logo.sprite.SetY(Window.GetY() + Window.GetHeight() / 3 - logo.image.GetHeight() / 2);
+logo.sprite.SetZ(10);
+
+bar_full = Image("bar.png");
+bar_bg = Image("bar-bg.png");
+
+bar_bg.sprite = Sprite(bar_bg);
+bar_bg.sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - bar_full.GetWidth() / 2);
+bar_bg.sprite.SetY(Window.GetY() + Window.GetHeight() * 2 / 3 - bar_full.GetHeight() / 2);
+bar_bg.sprite.SetZ(20);
+
+bar = Sprite();
+bar.SetX(Window.GetX() + Window.GetWidth() / 2 - bar_full.GetWidth() / 2);
+bar.SetY(Window.GetY() + Window.GetHeight() * 2 / 3 - bar_full.GetHeight() / 2);
+bar.SetZ(21);
+bar_image = bar_full;
+bar.SetImage(bar_image);
+bar.SetX(Window.GetX() + Window.GetWidth() / 2 - bar_image.GetWidth() / 2);
+
+fun progress_callback (duration, progress)
+{
+  new_width = Math.Int(bar_full.GetWidth() * progress);
+  if (new_width < 1)
+    new_width = 1;
+  if (new_width > bar_full.GetWidth())
+    new_width = bar_full.GetWidth();
+  if (bar_image.GetWidth(bar) != new_width)
+  {
+    bar_image = bar_full.Scale(new_width, bar_full.GetHeight());
+    bar.SetImage(bar_image);
+    x = Window.GetX() + Window.GetWidth() / 2 - bar_image.GetWidth() / 2;
+    bar.SetX(x);
+  }
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+fun quit_callback ()
+{
+}
+
+Plymouth.SetQuitFunction(quit_callback);

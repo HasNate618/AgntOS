@@ -1,27 +1,26 @@
-                 ██
-               ██████████
-            ██████    ██████
-         ██████         ██████
-       ██████              ██████
-    ██████                    ██████
- ██████                          ██████
-█████    █                      █    █████
-███     ████                  ████     ███
-███       █████            █████       ███
-███         █████        █████         ███
-███           ████      ████           ███
-███               ████████              ███
-███               ████████              ███
-███                ██████               ███
-███           ██████████████            ███
-███         ██████████████████         ███
-███       ██████            ██████     ███
-███     ██████                ██████   ███
-█████    █                      █    █████
- ██████                          ██████
-    ██████                    ██████
-       ██████              ██████
-         ██████        ██████
-           ██████    ██████
-             ██████████
-                ████
+                  oooo                  
+               oooooooooo               
+             oooooooooooooo             
+          oooooo        oooooo          
+       oooooo              oooooo       
+    oooooo                    oooooo    
+  ooooo                          ooooo  
+ oooo   ooo                  ooo  ooooo 
+ ooo    coooo              ooooc    ooo 
+ oo       oooooo        oooooo       oo 
+ oo          oooo      oooo          oo 
+ oo           --  oooo `--           oo 
+ oo              oooooo              oo 
+ oo              cooooo              oo 
+ oo            o   oo`  oo           oo 
+ oo          oooo      oooo          oo 
+ oo        ooool        loooo        oo 
+ ooo     ooooo            oooooo    ooo 
+ ooooo  ooo                  ooo  ooooo 
+   oooo   :                      oooo   
+    l:oooo                    oooo:l    
+       cloooo              oooolc       
+          ooooooo      ooooooo          
+             oooooooooooooo             
+               -oooooooo:               
+                  `oo`                  
