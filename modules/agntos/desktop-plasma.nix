@@ -31,6 +31,8 @@ in {
       dolphin
       plasma-systemmonitor
       papirus-icon-theme
+      kora-icon-theme
+      agntos-start-icon
     ];
 
     programs.dconf.enable = true;

@@ -70,7 +70,7 @@ in {
     [KDE]
     LookAndFeelPackage=org.kde.breezedark.desktop
     [Icons]
-    Theme=Papirus-Dark
+    Theme=agntos-start
     [Fonts]
     fixed=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
     General=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0
