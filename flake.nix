@@ -12,6 +12,7 @@
       agntos-branding = final.callPackage ./pkgs/agntos-branding { };
       agntos-fonts = final.callPackage ./pkgs/agntos-fonts { };
       agntos-start-icon = final.callPackage ./pkgs/agntos-start-icon { };
+      winsur-kde = final.callPackage ./pkgs/winsur-kde { };
     };
   in {
     # --- Dev VM ---
@@ -48,7 +49,7 @@
         overlays = [ agntosOverlay ];
       };
     in {
-      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon;
+      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon winsur-kde;
     };
   };
 }

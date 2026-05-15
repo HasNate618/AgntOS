@@ -33,6 +33,7 @@ in {
       papirus-icon-theme
       kora-icon-theme
       agntos-start-icon
+      winsur-kde
     ];
 
     programs.dconf.enable = true;
