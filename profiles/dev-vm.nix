@@ -118,6 +118,38 @@ SH
       /home/developer/.config/plasmarc \
       /home/developer/.config/autostart \
       /home/developer/.local/share
+
+    # Customize Bart theme: more transparency, darker colors
+    BART_STORE=$(find /nix/store -maxdepth 1 -name "bart-kde-*" -type d | head -1)
+    if [ -n "$BART_STORE" ]; then
+      # Copy Bart plasma theme to user's writable directory
+      mkdir -p /home/developer/.local/share/plasma/desktoptheme/Bart/widgets
+      cp -r $BART_STORE/share/plasma/desktoptheme/Bart/* \
+        /home/developer/.local/share/plasma/desktoptheme/Bart/
+      # Copy color scheme
+      mkdir -p /home/developer/.local/share/color-schemes
+      cp $BART_STORE/share/color-schemes/Bart.colors \
+        /home/developer/.local/share/color-schemes/Bart.colors
+
+      # Patch panel background for more transparency (lower opacity)
+      for f in panel-background translucentbackground background; do
+        FILE="/home/developer/.local/share/plasma/desktoptheme/Bart/widgets/${f}.svgz"
+        if [ -f "$FILE" ]; then
+          zcat < "$FILE" | sed \
+            's/stop-opacity:0.49803922/stop-opacity:0.25/g; s/stop-opacity:0.81600001/stop-opacity:0.6/g; s/stop-opacity:0.86000001/stop-opacity:0.5/g; s/stop-opacity:0.875/stop-opacity:0.7/g' \
+            | gzip > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+        fi
+      done
+
+      # Darken Bart color scheme: make backgrounds darker, increase contrast
+      sed -i \
+        's/BackgroundAlternate=51,48,48/BackgroundAlternate=14,14,16/g; s/BackgroundNormal=51,48,48/BackgroundNormal=18,18,22/g; s/BackgroundAlternate=21,20,20/BackgroundAlternate=14,14,16/g; s/BackgroundNormal=21,20,20/BackgroundNormal=18,18,22/g; s/ForegroundNormal=237,240,242/ForegroundNormal=230,228,220/g; s/ForegroundNormal=201,212,230/ForegroundNormal=210,208,200/g; s/ForegroundNormal=183,186,195/ForegroundNormal=200,198,190/g' \
+        /home/developer/.local/share/color-schemes/Bart.colors
+      # Add AgntOS orange accent to selection colors
+      sed -i \
+        's/BackgroundNormal=217,90,60/BackgroundNormal=245,124,72/g; s/BackgroundAlternate=217,90,60/BackgroundAlternate=245,124,72/g' \
+        /home/developer/.local/share/color-schemes/Bart.colors
+    fi
   '';
 
   systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce
