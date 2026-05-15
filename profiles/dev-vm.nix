@@ -56,20 +56,19 @@
   '';
 
   system.activationScripts.ghostty-config = ''
-    mkdir -p /home/developer/.config/ghostty /home/developer/.config
-    chown developer:users /home/developer/.config
+    # User config directories
+    mkdir -p /home/developer/.config/ghostty /home/developer/.config/autostart
     ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
 
-    # Write complete kdeglobals with WinSur dark + Kora icons + AgntOS fonts
+    # kdeglobals: WinSur colors + agntos-start icons + AgntOS fonts
+    # agntos-start inherits Kora and overrides only the start-menu icon
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
 ColorScheme=WinSurDark
 widgetStyle=Breeze
 TerminalApplication=ghostty
 [Icons]
-Theme=kora
-[KDE]
-LookAndFeelPackage=com.github.yeyushengfan258.WinSur-dark
+Theme=agntos-start
 [Fonts]
 fixed=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
 General=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0
@@ -78,7 +77,7 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
 
-    # Set WinSur window decorations, blur effect, and compositing
+    # WinSur window decorations + blur
     cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
@@ -86,14 +85,14 @@ theme=__aurorae__svg__WinSur-dark
 [Effect-Blur]
 Enabled=true
 KWI
+
+    # Plasma desktop theme
     cat > /home/developer/.config/plasmarc << 'PLA'
 [Theme]
 name=WinSur-dark
 PLA
 
-    # Kvantum — removed, crashes Qt apps. Using Breeze + WinSur color scheme instead.
-    # KWin decorations and blur applied via autostart
-    mkdir -p /home/developer/.config/autostart
+    # Autostart: apply WinSur theme components individually (preserves icons)
     cat > /home/developer/.config/autostart/agntos-config.desktop << 'DESK'
 [Desktop Entry]
 Type=Application
@@ -105,28 +104,18 @@ DESK
     cat > /home/developer/.config/autostart/agntos-config.sh << 'SH'
 #!/usr/bin/env bash
 sleep 3
-# Apply WinSur look-and-feel (official KDE way — works when display is available)
-plasma-apply-lookandfeel -a com.github.yeyushengfan258.WinSur-dark 2>/dev/null
-# Re-apply our custom settings that look-and-feel overrides
-# Kora icons (look-and-feel sets its own icon theme)
-kwriteconfig6 --file kdeglobals --group Icons --key Theme kora 2>/dev/null || \
-  sed -i 's/^Theme=.*/Theme=kora/' ~/.config/kdeglobals
-# WinSurDark color scheme
-plasma-apply-colorscheme WinSurDark 2>/dev/null || true
-# Enable blur
-qdbus6 org.kde.kwin /Effects org.kde.kwin.Effects.loadEffect blur 2>/dev/null || \
-  kwriteconfig6 --file kwinrc --group Effect-Blur --key Enabled true 2>/dev/null || true
+plasma-apply-desktoptheme WinSur-dark 2>/dev/null &
+plasma-apply-colorscheme WinSurDark 2>/dev/null &
+qdbus org.kde.KWin /Effects loadEffect "blur" 2>/dev/null &
+wait
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
-    # Set splash theme
+    # Splash theme
     printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
 
-    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals \
-      /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
-      /home/developer/.config/plasmarc \
-      /home/developer/.config/autostart \
-      /home/developer/.local/share
+    chown -R developer:users /home/developer/.config \
+      /home/developer/.local/share 2>/dev/null || true
   '';
 
   systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce

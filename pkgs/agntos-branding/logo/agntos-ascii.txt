@@ -1,26 +1,18 @@
-                  oooo                  
-               oooooooooo               
-             oooooooooooooo             
-          oooooo        oooooo          
-       oooooo              oooooo       
-    oooooo                    oooooo    
-  ooooo                          ooooo  
- oooo   ooo                  ooo  ooooo 
- ooo    coooo              ooooc    ooo 
- oo       oooooo        oooooo       oo 
- oo          oooo      oooo          oo 
- oo           --  oooo `--           oo 
- oo              oooooo              oo 
- oo              cooooo              oo 
- oo            o   oo`  oo           oo 
- oo          oooo      oooo          oo 
- oo        ooool        loooo        oo 
- ooo     ooooo            oooooo    ooo 
- ooooo  ooo                  ooo  ooooo 
-   oooo   :                      oooo   
-    l:oooo                    oooo:l    
-       cloooo              oooolc       
-          ooooooo      ooooooo          
-             oooooooooooooo             
-               -oooooooo:               
-                  `oo`                  
+                MMMM                
+           MMMMMMMMMMMMMM           
+        MMMMMM        MMMMMM        
+     MMMM                  MMMM     
+ MMMMM                        MMMMM 
+MMM   -MMM                MMM-   MMM
+MM      -MMMMM        MMMMM-      MM
+MM         `MMM      MMM`         MM
+MM              MMMM              MM
+MM              :MM:              MM
+MM         MMMM      MMMM         MM
+MM       MMMM:        :MMMM       MM
+MMM    -MM:              :MM-    MMM
+ MMMMMMM                    MMMMMMM 
+     MMMMM                MMMMM     
+      :MMMMMMM        MMMMMMM:      
+           `:MMMMMMMMMM:`           
+                -MM-                
