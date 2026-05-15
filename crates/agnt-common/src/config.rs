@@ -39,6 +39,7 @@ pub struct ConfigProposal {
     pub summary: String,
     pub nix_changes: String,
     pub files_to_write: Vec<(String, String)>,
+    #[serde(default)]
     pub files_to_delete: Vec<String>,
     pub rollback_guidance: String,
 }

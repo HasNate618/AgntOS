@@ -18,6 +18,7 @@
       system = "x86_64-linux";
       modules = [
         ./modules/agntos/base.nix
+        ./modules/agntos/agent.nix
         ./modules/agntos/branding.nix
         ./modules/agntos/desktop-plasma.nix
         ./modules/agntos/vm.nix
@@ -31,6 +32,7 @@
       system = "x86_64-linux";
       modules = [
         ./modules/agntos/base.nix
+        ./modules/agntos/agent.nix
         ./modules/agntos/branding.nix
         ./modules/agntos/desktop-plasma.nix
         ./profiles/plasma.nix

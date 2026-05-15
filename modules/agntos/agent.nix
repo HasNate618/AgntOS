@@ -7,7 +7,8 @@
       wantedBy = [ "default.target" ];
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${pkgs.agntd}/bin/agntd";
+        ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p /run/agntd";
+        ExecStart = "${pkgs.agntd}/bin/agntd --socket /run/agntd/agent.sock";
         Restart = "on-failure";
         RestartSec = 5;
         Environment = "AGNTOS_CONFIG_DIR=${config.agntos.configDir}";

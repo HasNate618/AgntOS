@@ -126,25 +126,19 @@ fn generate(description: &str) -> Result<ConfigProposal, String> {
         })
     } else if lower.starts_with("disable ") {
         let service = sanitize_package_name(lower.strip_prefix("disable ").unwrap().trim());
-        let services_path = to_services_path(&service);
+        let file_path = format!("services/{}.nix", service);
         Ok(ConfigProposal {
             id,
             summary: format!("Disable service: {}", service),
             nix_changes: format!(
-                "services.{} = {{\n  enable = false;\n}};",
-                services_path
+                "Delete {} (service falls back to disabled default)",
+                file_path
             ),
-            files_to_write: vec![(
-                format!("services/{}.nix", service),
-                format!(
-                    "{{ config, pkgs, ... }}: {{\n  services.{} = {{\n    enable = false;\n  }};\n}}",
-                    services_path
-                ),
-            )],
-            files_to_delete: vec![],
+            files_to_write: vec![],
+            files_to_delete: vec![file_path.clone()],
             rollback_guidance: format!(
-                "To rollback: set `services.{}.enable = true`, then run `nixos-rebuild switch`.",
-                services_path
+                "To rollback: run `agntctl propose enable {}` to re-create the service module.",
+                service
             ),
         })
     } else {
@@ -222,7 +216,9 @@ mod tests {
     fn test_generate_disable() {
         let p = generate("disable sshd").unwrap();
         assert!(p.summary.contains("sshd"));
-        assert!(p.nix_changes.contains("enable = false"));
+        assert!(p.nix_changes.contains("Delete services/sshd.nix"));
+        assert!(p.files_to_write.is_empty());
+        assert_eq!(p.files_to_delete, vec!["services/sshd.nix"]);
     }
 
     #[test]

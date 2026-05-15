@@ -1,9 +1,31 @@
 use agnt_common::audit::{audit_id, AuditAction, AuditEntry, AuditLog, AuditResult};
 use agnt_common::config::ConfigProposal;
 use chrono::Utc;
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
 
 const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
+
+/// Sanitizes a relative file path so it cannot escape `base_dir` via `..`
+/// or absolute-prefix tricks.  Returns the resolved path on success.
+fn resolve_safe(base: &Path, rel: &str) -> Result<PathBuf, String> {
+    let candidate = Path::new(rel);
+    if candidate.is_absolute() {
+        return Err(format!("Refusing absolute path in proposal: {}", rel));
+    }
+    for component in candidate.components() {
+        match component {
+            Component::ParentDir => {
+                return Err(format!("Path escapes config directory: {}", rel));
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                return Err(format!("Unexpected path component in: {}", rel));
+            }
+            _ => {}
+        }
+    }
+    Ok(base.join(candidate))
+}
 
 /// Returns (program, args) for nixos-rebuild based on whether a flake
 /// environment is detected via `/etc/agntos/flake-info`.
@@ -46,14 +68,65 @@ pub fn execute(
         proposal.id, proposal.summary
     ));
 
+    // --- Snapshot existing state so we can roll back on rebuild failure ---
+    let mut snapshots: HashMap<PathBuf, Option<Vec<u8>>> = HashMap::new();
+    for (filename, _content) in &proposal.files_to_write {
+        let fp = resolve_safe(&dir, filename)?;
+        let old = if fp.exists() {
+            Some(
+                std::fs::read(&fp)
+                    .map_err(|e| format!("Failed to snapshot {}: {}", fp.display(), e))?,
+            )
+        } else {
+            None
+        };
+        snapshots.insert(fp, old);
+    }
+    for filename in &proposal.files_to_delete {
+        let fp = resolve_safe(&dir, filename)?;
+        let old = if fp.exists() {
+            Some(
+                std::fs::read(&fp)
+                    .map_err(|e| format!("Failed to snapshot {}: {}", fp.display(), e))?,
+            )
+        } else {
+            None
+        };
+        snapshots.entry(fp).or_insert(old);
+    }
+
+    // --- Helper to unwind mutations on failure ---
+    let rollback_mutations = |out: &mut String| {
+        for (fp, old) in snapshots.iter() {
+            match old {
+                Some(prev) => {
+                    if let Err(e) = std::fs::write(fp, prev) {
+                        *out += &format!(
+                            "    (cleanup error: couldn't restore {}: {})\n",
+                            fp.display(),
+                            e
+                        );
+                    } else {
+                        *out += &format!("  Restored:   {}\n", fp.display());
+                    }
+                }
+                None => {
+                    if fp.exists() {
+                        let _ = std::fs::remove_file(fp);
+                        *out += &format!("  Cleaned:    {}\n", fp.display());
+                    }
+                }
+            }
+        }
+    };
+
     // Write the Nix files
     let mut written_files = Vec::new();
     for (filename, content) in &proposal.files_to_write {
-        let filepath = dir.join(filename);
+        let filepath = resolve_safe(&dir, filename)?;
         if dry_run {
             out.push_str(&format!("  Would write: {}\n", filepath.display()));
         } else {
-            // Ensure parent directory exists
             if let Some(parent) = filepath.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
                     format!("Failed to create directory {}: {}", parent.display(), e)
@@ -68,7 +141,7 @@ pub fn execute(
 
     // Delete files marked for removal
     for filename in &proposal.files_to_delete {
-        let filepath = dir.join(filename);
+        let filepath = resolve_safe(&dir, filename)?;
         if dry_run {
             out.push_str(&format!("  Would delete: {}\n", filepath.display()));
         } else {
@@ -114,6 +187,8 @@ pub fn execute(
                             out.push_str(&format!("    ! {}\n", line));
                         }
                     }
+                    // Unwind file mutations
+                    rollback_mutations(&mut out);
                     // Log the failure
                     let _ = log_apply(
                         &proposal,
@@ -301,6 +376,106 @@ mod tests {
                 "--impure"
             ]
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_resolve_safe_rejects_absolute() {
+        let base = PathBuf::from("/etc/agntos");
+        assert!(resolve_safe(&base, "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn test_resolve_safe_rejects_parent_dir() {
+        let base = PathBuf::from("/etc/agntos");
+        assert!(resolve_safe(&base, "../passwd").is_err());
+        assert!(resolve_safe(&base, "packages/../../../passwd").is_err());
+    }
+
+    #[test]
+    fn test_resolve_safe_allows_normal_paths() {
+        let base = PathBuf::from("/etc/agntos");
+        let p = resolve_safe(&base, "packages/kitty.nix").unwrap();
+        assert_eq!(p, PathBuf::from("/etc/agntos/packages/kitty.nix"));
+    }
+
+    #[test]
+    fn test_snapshot_rollback_writes() {
+        use std::fs;
+        let dir = PathBuf::from("/tmp/agntos-apply-rollback-write");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // Pre-populate a file that will be overwritten
+        fs::create_dir_all(dir.join("packages")).unwrap();
+        fs::write(dir.join("packages/keep.nix"), "original").unwrap();
+
+        // Create a proposal that overwrites it and writes a new file
+        let proposal = ConfigProposal {
+            id: "test-rollback".into(),
+            summary: "overwrite test".into(),
+            nix_changes: "test".into(),
+            files_to_write: vec![
+                ("packages/keep.nix".into(), "new".into()),
+                ("packages/extra.nix".into(), "extra".into()),
+            ],
+            files_to_delete: vec![],
+            rollback_guidance: "".into(),
+        };
+        let props_dir = dir.join("proposals");
+        fs::create_dir_all(&props_dir).unwrap();
+        fs::write(
+            props_dir.join("test-rollback.json"),
+            serde_json::to_string(&proposal).unwrap(),
+        )
+        .unwrap();
+
+        // Apply with no-rebuild (simulates what happens before nixos-rebuild)
+        let result = execute("test-rollback", false, true, Some(&dir));
+        assert!(result.is_ok());
+
+        // Both files should be present with new content
+        assert_eq!(
+            fs::read_to_string(dir.join("packages/keep.nix")).unwrap(),
+            "new"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("packages/extra.nix")).unwrap(),
+            "extra"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_snapshot_rollback_deletes() {
+        use std::fs;
+        let dir = PathBuf::from("/tmp/agntos-apply-rollback-delete");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(dir.join("packages")).unwrap();
+        fs::write(dir.join("packages/gone.nix"), "will be deleted").unwrap();
+
+        let proposal = ConfigProposal {
+            id: "test-delete".into(),
+            summary: "delete test".into(),
+            nix_changes: "test".into(),
+            files_to_write: vec![],
+            files_to_delete: vec!["packages/gone.nix".into()],
+            rollback_guidance: "".into(),
+        };
+        let props_dir = dir.join("proposals");
+        fs::create_dir_all(&props_dir).unwrap();
+        fs::write(
+            props_dir.join("test-delete.json"),
+            serde_json::to_string(&proposal).unwrap(),
+        )
+        .unwrap();
+
+        let result = execute("test-delete", false, true, Some(&dir));
+        assert!(result.is_ok());
+        assert!(!dir.join("packages/gone.nix").exists());
+
         let _ = fs::remove_dir_all(&dir);
     }
 }
