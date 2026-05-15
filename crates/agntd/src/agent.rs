@@ -214,7 +214,12 @@ fn execute_tool_call(tc: &ToolCall) -> Result<String, String> {
                 .ok_or_else(|| "Missing required argument: proposal_id".to_string())?;
 
             if !util::confirm(&format!("  LLM requests apply {}. Proceed?", proposal_id)) {
-                return Ok("CANCELLED_BY_USER".to_string());
+                // Return a message that the LLM can act on: does NOT retry.
+                return Ok(format!(
+                    "APPLY_CANCELLED: confirmation declined. Proposal {} was NOT applied. \
+Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed.",
+                    proposal_id, proposal_id
+                ));
             }
 
             let no_rebuild = args
@@ -384,7 +389,11 @@ fn execute_tool_call(tc: &ToolCall) -> Result<String, String> {
         }
         "rollback" => {
             if !util::confirm("  LLM requests system rollback. Proceed?") {
-                return Ok("CANCELLED_BY_USER".to_string());
+                return Ok(
+                    "ROLLBACK_CANCELLED: confirmation declined. System was NOT rolled back. \
+Do NOT retry — tell the user to run 'agntctl rollback apply' if they want to proceed."
+                        .to_string(),
+                );
             }
             command_result(util::run_agntctl(&["rollback", "--config-dir", &cfg]))
         }
