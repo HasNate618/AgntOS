@@ -290,7 +290,7 @@ pub fn tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "audit",
-                "description": "Read or search the audit log for past actions.",
+                "description": "Read or search the audit log for past actions. Use 'search' with a query to find entries by package name, file path, summary, or the original user prompt that triggered the action. This is how you answer 'why was X installed?' questions.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -411,6 +411,9 @@ Rules:\n\
 - Use run_bash for ls, grep, find, systemctl, journalctl, dmesg,\n\
   and any command without a dedicated tool.\n\
 - When you learn stable system facts, store them in memory.\n\
+- When asked why a change was made (e.g. \"why is X installed?\"),\n\
+  use audit search to retrieve the recorded prompt. Every apply stores\n\
+  the user\'s original request in the audit log.\n\
 - Explain what you are doing and why. Be concise.\n\
 \n\
 System snapshot:\n{}\n\

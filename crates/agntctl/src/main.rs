@@ -97,7 +97,7 @@ enum Command {
         id: Option<String>,
 
         /// Search query (for "search")
-        #[arg(required = false)]
+        #[arg(long)]
         query: Option<String>,
 
         /// Max entries to show (for "list" / "search")

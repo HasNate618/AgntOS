@@ -278,6 +278,7 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                     command_result(util::run_agntctl(&[
                         "audit",
                         "search",
+                        "--query",
                         query,
                         "--limit",
                         &limit_arg,
