@@ -120,7 +120,7 @@ SH
       /home/developer/.local/share
 
     # Customize Bart theme: more transparency, darker colors
-    BART_STORE=$(find /nix/store -maxdepth 1 -name "bart-kde-*" -type d | head -1)
+    BART_STORE=$(find /nix/store -maxdepth 1 -name "*bart-kde*" -type d | head -1)
     if [ -n "$BART_STORE" ]; then
       # Copy Bart plasma theme to user's writable directory
       mkdir -p /home/developer/.local/share/plasma/desktoptheme/Bart/widgets
