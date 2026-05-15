@@ -149,6 +149,9 @@ SH
       sed -i \
         's/BackgroundNormal=217,90,60/BackgroundNormal=245,124,72/g; s/BackgroundAlternate=217,90,60/BackgroundAlternate=245,124,72/g' \
         /home/developer/.local/share/color-schemes/Bart.colors
+
+      # Ensure all customized theme files are owned by the user
+      chown -R developer:users /home/developer/.local/share
     fi
   '';
 
