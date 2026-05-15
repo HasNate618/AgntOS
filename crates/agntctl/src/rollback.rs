@@ -149,6 +149,8 @@ fn log_rollback(result: Result<(), String>, config_dir: &PathBuf) -> Result<(), 
         files_deleted: vec![],
         rollback_hint: Some("Rolled back via nixos-rebuild switch --rollback".to_string()),
         result: audit_result,
+        prompt: None,
+        rationale: None,
     };
 
     let log_path = crate::audit::get_log_path(Some(config_dir));

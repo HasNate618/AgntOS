@@ -265,7 +265,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     "type": "object",
                     "required": ["description"],
                     "properties": {
-                        "description": { "type": "string" }
+                        "description": { "type": "string" },
+                        "rationale": { "type": "string", "description": "Optional explanation of why this change is needed" }
                     }
                 }
             }

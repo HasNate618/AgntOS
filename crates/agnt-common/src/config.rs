@@ -42,4 +42,6 @@ pub struct ConfigProposal {
     #[serde(default)]
     pub files_to_delete: Vec<String>,
     pub rollback_guidance: String,
+    #[serde(default)]
+    pub prompt: Option<String>,
 }

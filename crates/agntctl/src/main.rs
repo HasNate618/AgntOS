@@ -55,6 +55,14 @@ enum Command {
         /// Config directory (default: /etc/agntos)
         #[arg(long)]
         config_dir: Option<PathBuf>,
+
+        /// Original user prompt — records the "why" in the audit log
+        #[arg(long)]
+        prompt: Option<String>,
+
+        /// Agent's rationale for the change
+        #[arg(long)]
+        rationale: Option<String>,
     },
     /// Apply an approved proposal
     Apply {
@@ -328,7 +336,15 @@ fn main() {
             json,
             dry_run,
             config_dir,
-        } => match propose::execute(&description, dry_run, config_dir.as_ref()) {
+            prompt,
+            rationale,
+        } => match propose::execute(
+            &description,
+            dry_run,
+            config_dir.as_ref(),
+            prompt.as_deref(),
+            rationale.as_deref(),
+        ) {
             Ok(output) => {
                 if json {
                     println!(

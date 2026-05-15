@@ -90,16 +90,21 @@ pub fn execute_show(id: &str, json: bool, config_dir: Option<&PathBuf>) -> Resul
 
     let rollback = entry.rollback_hint.as_deref().unwrap_or("(none)");
 
+    let prompt_line = entry
+        .prompt
+        .as_deref()
+        .map(|p| format!("\n         Prompt: {}\n", p))
+        .unwrap_or_default();
+
     Ok(format!(
         "Entry: {}\n\
          Time:  {}\n\
          Actor: {}\n\
          Status: {}\n\
-         \n\
          Summary: {}\n\
-         Files changed:\n{}\n\
+         {}Files changed:\n{}\n\
          Rollback: {}\n",
-        entry.id, ts, entry.actor, status, entry.summary, files, rollback,
+        entry.id, ts, entry.actor, status, entry.summary, prompt_line, files, rollback,
     ))
 }
 
@@ -117,6 +122,8 @@ pub fn log_inspect(target: &str, config_dir: Option<&PathBuf>) -> Result<(), Str
         files_written: vec![],
         files_deleted: vec![],
         rollback_hint: None,
+        prompt: None,
+        rationale: None,
         result: AuditResult::Success { message: None },
     };
     let log_path = get_log_path(config_dir);
@@ -137,6 +144,8 @@ pub fn log_write(path: &str, bytes: usize, config_dir: Option<&PathBuf>) {
         files_written: vec![path.to_string()],
         files_deleted: vec![],
         rollback_hint: None,
+        prompt: None,
+        rationale: None,
         result: AuditResult::Success { message: None },
     };
     let log_path = get_log_path(config_dir);
@@ -162,6 +171,8 @@ pub fn log_edit(path: &str, old_str: &str, new_str: &str, config_dir: Option<&Pa
         files_written: vec![path.to_string()],
         files_deleted: vec![],
         rollback_hint: None,
+        prompt: None,
+        rationale: None,
         result: AuditResult::Success { message: None },
     };
     let log_path = get_log_path(config_dir);
@@ -204,6 +215,8 @@ pub fn log_bash(
         files_written: vec![],
         files_deleted: vec![],
         rollback_hint: None,
+        prompt: None,
+        rationale: None,
         result: status,
     };
     let log_path = get_log_path(config_dir);
@@ -254,6 +267,74 @@ mod tests {
 
         let result = execute_list(10, false, Some(&dir)).unwrap();
         assert!(result.contains("Inspected cpu"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_provenance_roundtrip() {
+        use agnt_common::audit::AuditLog;
+        use agnt_common::audit::{audit_id, AuditAction, AuditResult};
+        use chrono::Utc;
+
+        let dir = PathBuf::from("/tmp/agntos-audit-provenance");
+        let _ = std::fs::remove_dir_all(&dir);
+        let log_path = dir.join("audit.jsonl");
+
+        let entry = AuditEntry {
+            id: audit_id(),
+            timestamp: Utc::now(),
+            action: AuditAction::Apply {
+                proposal_id: "p-test".into(),
+            },
+            actor: "agent".into(),
+            summary: "Applied: Install htop".into(),
+            files_changed: vec!["packages/htop.nix".into()],
+            files_written: vec!["packages/htop.nix".into()],
+            files_deleted: vec![],
+            rollback_hint: None,
+            result: AuditResult::Success { message: None },
+            prompt: Some("Install htop so I can monitor memory".into()),
+            rationale: None,
+        };
+
+        // Write
+        AuditLog::append_to_disk(&log_path, &entry).unwrap();
+
+        // Read back
+        let log = AuditLog::load(&log_path).unwrap();
+        assert_eq!(log.entries.len(), 1);
+        assert_eq!(
+            log.entries[0].prompt.as_deref(),
+            Some("Install htop so I can monitor memory")
+        );
+
+        // Verify show output includes provenance
+        let show_out = execute_show(&entry.id, false, Some(&dir)).unwrap();
+        assert!(show_out.contains("Install htop so I can monitor memory"));
+        assert!(show_out.contains("Prompt:"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_provenance_backward_compat() {
+        use agnt_common::audit::AuditLog;
+
+        let dir = PathBuf::from("/tmp/agntos-audit-backcompat");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log_path = dir.join("audit.jsonl");
+
+        // Write a legacy entry without prompt/rationale fields
+        let legacy = r#"{"id":"a-legacy","timestamp":"2026-01-01T00:00:00Z","action":{"type":"Apply","proposal_id":"p-old"},"actor":"user","summary":"Old style","files_changed":[],"files_written":[],"files_deleted":[],"rollback_hint":null,"result":{"status":"Success","message":null}}"#;
+        std::fs::write(&log_path, format!("{}\n", legacy)).unwrap();
+
+        let log = AuditLog::load(&log_path).unwrap();
+        assert_eq!(log.entries.len(), 1);
+        // Default should be None, not an error
+        assert!(log.entries[0].prompt.is_none());
+        assert!(log.entries[0].rationale.is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

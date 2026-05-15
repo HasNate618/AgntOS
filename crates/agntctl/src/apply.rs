@@ -304,6 +304,8 @@ fn log_apply(
         files_deleted: files_deleted.to_vec(),
         rollback_hint: Some(proposal.rollback_guidance.clone()),
         result: audit_result,
+        prompt: proposal.prompt.clone(),
+        rationale: None,
     };
 
     let log_path = crate::audit::get_log_path(Some(config_dir));
@@ -329,6 +331,7 @@ mod tests {
             )],
             files_to_delete: vec![],
             rollback_guidance: "Remove hello from packages.nix.".to_string(),
+            prompt: None,
         };
         let json = serde_json::to_string_pretty(&proposal).unwrap();
         fs::write(props_dir.join(format!("{}.json", id)), json).unwrap();
@@ -454,6 +457,7 @@ mod tests {
             ],
             files_to_delete: vec![],
             rollback_guidance: "".into(),
+            prompt: None,
         };
         let props_dir = dir.join("proposals");
         fs::create_dir_all(&props_dir).unwrap();
@@ -496,6 +500,7 @@ mod tests {
             files_to_write: vec![],
             files_to_delete: vec!["packages/gone.nix".into()],
             rollback_guidance: "".into(),
+            prompt: None,
         };
         let props_dir = dir.join("proposals");
         fs::create_dir_all(&props_dir).unwrap();
@@ -508,6 +513,53 @@ mod tests {
         let result = execute("test-delete", false, true, false, Some(&dir));
         assert!(result.is_ok());
         assert!(!dir.join("packages/gone.nix").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_apply_provenance_flows_to_audit() {
+        use std::fs;
+        let dir = PathBuf::from("/tmp/agntos-apply-provenance");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("packages")).unwrap();
+
+        let proposal = ConfigProposal {
+            id: "p-prov".into(),
+            summary: "provenance test".into(),
+            nix_changes: "test".into(),
+            files_to_write: vec![(
+                "packages/htop.nix".into(),
+                "{ config, pkgs, ... }: {\n  environment.systemPackages = [ pkgs.htop ];\n}".into(),
+            )],
+            files_to_delete: vec![],
+            rollback_guidance: "Remove htop".into(),
+            prompt: Some("Install htop for memory monitoring".into()),
+        };
+        let props_dir = dir.join("proposals");
+        fs::create_dir_all(&props_dir).unwrap();
+        fs::write(
+            props_dir.join("p-prov.json"),
+            serde_json::to_string(&proposal).unwrap(),
+        )
+        .unwrap();
+
+        let result = execute("p-prov", false, true, false, Some(&dir));
+        assert!(result.is_ok());
+
+        // Read the audit log and verify prompt was captured
+        let log_path = crate::audit::get_log_path(Some(&dir));
+        let log = agnt_common::audit::AuditLog::load(&log_path).unwrap();
+        let apply_entries: Vec<_> = log
+            .entries
+            .iter()
+            .filter(|e| matches!(e.action, agnt_common::audit::AuditAction::Apply { .. }))
+            .collect();
+        assert!(!apply_entries.is_empty());
+        assert_eq!(
+            apply_entries[0].prompt.as_deref(),
+            Some("Install htop for memory monitoring")
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

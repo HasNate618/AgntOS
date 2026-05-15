@@ -18,6 +18,10 @@ pub struct AuditEntry {
     pub files_deleted: Vec<String>,
     pub rollback_hint: Option<String>,
     pub result: AuditResult,
+    #[serde(default)]
+    pub prompt: Option<String>,
+    #[serde(default)]
+    pub rationale: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

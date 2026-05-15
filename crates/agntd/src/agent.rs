@@ -96,7 +96,7 @@ pub fn process_prompt(input: &str, bootstrap: &DaemonBootstrap) -> Result<String
         }
 
         for tc in &resp.tool_calls {
-            let result = match execute_tool_call(tc) {
+            let result = match execute_tool_call(tc, Some(input)) {
                 Ok(s) => s,
                 Err(e) => format!("TOOL_ERROR: {}", e),
             };
@@ -161,7 +161,7 @@ pub fn agent_turn(
 
         // Execute each tool call and feed results back to the LLM.
         for tc in &resp.tool_calls {
-            let result = match execute_tool_call(tc) {
+            let result = match execute_tool_call(tc, Some(input)) {
                 Ok(s) => s,
                 Err(e) => format!("TOOL_ERROR: {}", e),
             };
@@ -183,7 +183,7 @@ pub fn agent_turn(
 /// Executes a single tool call by delegating to `agntctl` (or the in-process memory module).
 ///
 /// The `apply` tool requires interactive user confirmation before proceeding.
-fn execute_tool_call(tc: &ToolCall) -> Result<String, String> {
+fn execute_tool_call(tc: &ToolCall, user_prompt: Option<&str>) -> Result<String, String> {
     let cfg = util::config_dir_str();
     let args = tc.arguments.as_object().cloned().unwrap_or_default();
 
@@ -200,12 +200,17 @@ fn execute_tool_call(tc: &ToolCall) -> Result<String, String> {
                 .get("description")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| "Missing required argument: description".to_string())?;
-            command_result(util::run_agntctl(&[
-                "propose",
-                "--config-dir",
-                &cfg,
-                description,
-            ]))
+            let rationale = args.get("rationale").and_then(|v| v.as_str()).unwrap_or("");
+            let mut cmd = vec!["propose", "--config-dir", &cfg, description];
+            if let Some(p) = user_prompt {
+                cmd.push("--prompt");
+                cmd.push(p);
+            }
+            if !rationale.is_empty() {
+                cmd.push("--rationale");
+                cmd.push(rationale);
+            }
+            command_result(util::run_agntctl(&cmd))
         }
         "apply" => {
             let proposal_id = args

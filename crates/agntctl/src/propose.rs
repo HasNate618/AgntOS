@@ -50,12 +50,15 @@ pub fn execute(
     description: &str,
     dry_run: bool,
     config_dir: Option<&PathBuf>,
+    prompt: Option<&str>,
+    _rationale: Option<&str>,
 ) -> Result<String, String> {
     let dir = config_dir
         .cloned()
         .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_DIR));
 
-    let proposal = generate(description)?;
+    let mut proposal = generate(description)?;
+    proposal.prompt = prompt.map(|s| s.to_string());
 
     if !dry_run {
         let proposals_dir = dir.join("proposals");
@@ -124,6 +127,7 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
                 ),
             )],
             files_to_delete: vec![],
+            prompt: None,
             rollback_guidance: format!(
                 "To rollback: delete {} or run `agntctl propose remove {}`.",
                 file_path, package
@@ -146,6 +150,7 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
             ),
             files_to_write: vec![],
             files_to_delete: vec![file_path.clone()],
+            prompt: None,
             rollback_guidance: format!(
                 "To rollback: run `agntctl propose install {}` to re-create the module.",
                 package
@@ -169,6 +174,7 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
                 ),
             )],
             files_to_delete: vec![],
+            prompt: None,
             rollback_guidance: format!(
                 "To rollback: set `services.{}.enable = false`, then run `nixos-rebuild switch`.",
                 services_path
@@ -186,6 +192,7 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
             ),
             files_to_write: vec![],
             files_to_delete: vec![file_path.clone()],
+            prompt: None,
             rollback_guidance: format!(
                 "To rollback: run `agntctl propose enable {}` to re-create the service module.",
                 service
@@ -232,6 +239,7 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
                 ),
             )],
             files_to_delete: vec![],
+            prompt: None,
             rollback_guidance: format!(
                 "To rollback: run `agntctl propose set {} <original-value>`.",
                 option_path
@@ -253,6 +261,7 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
                 ),
             )],
             files_to_delete: vec![],
+            prompt: None,
             rollback_guidance: "Check the audit log before rolling back custom changes."
                 .to_string(),
         })
@@ -352,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_execute_dry_run() {
-        let result = execute("install hello", true, None).unwrap();
+        let result = execute("install hello", true, None, None, None).unwrap();
         assert!(result.contains("DRY RUN"));
         assert!(result.contains("hello"));
     }
@@ -361,7 +370,7 @@ mod tests {
     fn test_execute_writes_file() {
         use std::fs;
         let dir = std::env::temp_dir().join(format!("agntos-test-{}", generate_id()));
-        let result = execute("install hello", false, Some(&dir)).unwrap();
+        let result = execute("install hello", false, Some(&dir), None, None).unwrap();
         assert!(!result.contains("DRY RUN"));
         assert!(result.contains("Staged at"));
 
@@ -372,6 +381,60 @@ mod tests {
         assert!(entries.len() > 0);
 
         // Cleanup
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_propose_with_prompt() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("agntos-prove-prompt-{}", generate_id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let result = execute(
+            "install htop",
+            false,
+            Some(&dir),
+            Some("Install htop for monitoring"),
+            None,
+        )
+        .unwrap();
+        assert!(result.contains("Staged at"));
+
+        // Read the proposal JSON and verify prompt field
+        let props_dir = dir.join("proposals");
+        let mut entries: Vec<_> = fs::read_dir(&props_dir).unwrap().collect();
+        assert!(!entries.is_empty());
+        if let Some(Ok(entry)) = entries.pop() {
+            let content = fs::read_to_string(entry.path()).unwrap();
+            let proposal: ConfigProposal = serde_json::from_str(&content).unwrap();
+            assert_eq!(
+                proposal.prompt.as_deref(),
+                Some("Install htop for monitoring")
+            );
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_propose_without_prompt_backward_compat() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("agntos-prove-noprompt-{}", generate_id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let result = execute("install htop", false, Some(&dir), None, None).unwrap();
+        assert!(result.contains("Staged at"));
+
+        // Read the proposal JSON and verify prompt is None (backward compat)
+        let props_dir = dir.join("proposals");
+        let mut entries: Vec<_> = fs::read_dir(&props_dir).unwrap().collect();
+        assert!(!entries.is_empty());
+        if let Some(Ok(entry)) = entries.pop() {
+            let content = fs::read_to_string(entry.path()).unwrap();
+            let proposal: ConfigProposal = serde_json::from_str(&content).unwrap();
+            assert!(proposal.prompt.is_none());
+        }
+
         let _ = fs::remove_dir_all(&dir);
     }
 }
