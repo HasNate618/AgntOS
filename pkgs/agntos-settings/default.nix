@@ -1,4 +1,4 @@
-{ lib, rustPlatform, pkg-config, openssl, qt6, kirigami }:
+{ lib, rustPlatform, pkg-config, openssl, qt6, kdePackages, makeWrapper }:
 
 rustPlatform.buildRustPackage {
   pname = "agntos-settings";
@@ -17,19 +17,24 @@ rustPlatform.buildRustPackage {
 
   cargoBuildFlags = [ "-p" "agntos-settings" ];
 
-  nativeBuildInputs = [ pkg-config qt6.qtdeclarative qt6.qttools qt6.wrapQtAppsHook ];
-  buildInputs = [ openssl qt6.qtdeclarative qt6.qtbase kirigami ];
+  nativeBuildInputs = [ pkg-config qt6.qtdeclarative qt6.qttools makeWrapper ];
+  buildInputs = [ openssl qt6.qtdeclarative qt6.qtbase ];
 
   cargoLock = {
     lockFile = ../../Cargo.lock;
   };
 
+  dontWrapQtApps = true;
+
   postInstall = ''
     mkdir -p $out/share/agntos-settings/qml
     cp -r crates/agntos-settings/resources/* $out/share/agntos-settings/qml/
 
+    wrapProgram $out/bin/agntos-settings \
+      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ qt6.qtbase qt6.qtdeclarative ]}"
+
     mkdir -p $out/share/applications
-    cat > $out/share/applications/agntos-settings.desktop << 'EOF'
+    cat > $out/share/applications/agntos-settings.desktop << 'DESKTOP'
 [Desktop Entry]
 Name=AgntOS Control Center
 Comment=Configure and interact with the AgntOS agent
@@ -39,22 +44,12 @@ Terminal=false
 Type=Application
 Categories=System;Settings;
 Keywords=agent;ai;nixos;settings;
-EOF
+DESKTOP
   '';
-
-  qtWrapperArgs = [
-    "--prefix" "QML2_IMPORT_PATH" ":" "${kirigami}/${kirigami.qtQmlPrefix}"
-  ];
 
   meta = {
     description = "Kirigami GUI for AgntOS agent configuration";
-    longDescription = ''
-      agntos-settings provides a chat-driven interface to the AgntOS agent,
-      plus dashboard pages for system status, pending proposals, and audit
-      log history. Communicates with agntd over a Unix domain socket.
-    '';
     license = lib.licenses.mit;
-    maintainers = [ ];
     mainProgram = "agntos-settings";
     platforms = lib.platforms.linux;
   };
