@@ -420,7 +420,19 @@ Do NOT retry — tell the user to run 'agntctl rollback apply' if they want to p
                         .to_string(),
                 );
             }
-            command_result(util::run_agntctl(&["rollback", "--config-dir", &cfg]))
+            let audit_id = args.get("audit_id").and_then(|v| v.as_str());
+            let mut cmd = vec!["rollback", "--config-dir", &cfg];
+            match audit_id {
+                Some(id) if !id.is_empty() => {
+                    cmd.push("undo");
+                    cmd.push("--undo-id");
+                    cmd.push(id);
+                }
+                _ => {
+                    cmd.push("apply");
+                }
+            }
+            command_result(util::run_agntctl(&cmd))
         }
         "read_file" => {
             let path = args

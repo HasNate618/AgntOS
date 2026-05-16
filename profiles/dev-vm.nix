@@ -59,8 +59,12 @@
     mkdir -p /home/developer/.config
     chown developer:users /home/developer/.config
 
+    # Only write user-facing config files if they don't exist
+    # to avoid overwriting user customizations on every rebuild.
+
     # Write complete kdeglobals with Bart colors + Kora icons + AgntOS fonts
-    cat > /home/developer/.config/kdeglobals << 'KDE'
+    if [ ! -f /home/developer/.config/kdeglobals ]; then
+      cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
 ColorScheme=Bart
 widgetStyle=Breeze
@@ -74,9 +78,11 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 [WM]
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
+    fi
 
     # Set Bart window decorations, blur, compositing (QPainter for VM compat), and animations
-    cat > /home/developer/.config/kwinrc << 'KWI'
+    if [ ! -f /home/developer/.config/kwinrc ]; then
+      cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
 theme=Bart
@@ -95,14 +101,18 @@ maximizeEnabled=true
 squashEnabled=true
 fadingpopupsEnabled=true
 KWI
-    cat > /home/developer/.config/plasmarc << 'PLA'
+    fi
+    if [ ! -f /home/developer/.config/plasmarc ]; then
+      cat > /home/developer/.config/plasmarc << 'PLA'
 [Theme]
 name=Bart
 PLA
+    fi
 
     # Create Konsole profile with transparency and blur
     mkdir -p /home/developer/.local/share/konsole
-    cat > /home/developer/.local/share/konsole/AgntOS.profile << 'KON'
+    if [ ! -f /home/developer/.local/share/konsole/AgntOS.profile ]; then
+      cat > /home/developer/.local/share/konsole/AgntOS.profile << 'KON'
 [General]
 Name=AgntOS
 Parent=FALLBACK/
@@ -115,6 +125,9 @@ Font=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
 [Background]
 Mode=Blur
 KON
+    fi
+
+    # System-managed configs always get written on rebuild
     cat > /home/developer/.config/konsolerc << 'KRC'
 [Desktop Entry]
 DefaultProfile=AgntOS.profile
@@ -146,9 +159,11 @@ SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
     # Set splash theme
-    printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
+    if [ ! -f /home/developer/.config/ksplashrc ]; then
+      printf '[KSplash]\nEngine=KSplashQML\nTheme=agntos-splash\n' > /home/developer/.config/ksplashrc
+    fi
 
-    # Clear stale cache
+    # Clear stale cache — always runs to stay in sync with config changes
     rm -f /home/developer/.cache/plasma_theme_Bart.kcache
     rm -f /home/developer/.cache/icon-cache.kcache
 

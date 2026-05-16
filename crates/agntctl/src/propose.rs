@@ -230,12 +230,12 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
         Ok(ConfigProposal {
             id,
             summary: format!("Set option: {} = {}", option_path, value_expr),
-            nix_changes: format!("{}.{} = {};", option_path, option_path, value_expr),
+            nix_changes: format!("{} = {};", option_path, value_expr),
             files_to_write: vec![(
                 file_path,
                 format!(
-                    "{{ config, lib, pkgs, ... }}: {{\n  {}.{} = {};\n}}\n",
-                    option_path, option_path, value_expr
+                    "{{ config, lib, pkgs, ... }}: {{\n  {} = {};\n}}\n",
+                    option_path, value_expr
                 ),
             )],
             files_to_delete: vec![],

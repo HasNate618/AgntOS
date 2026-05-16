@@ -325,7 +325,13 @@ pub fn tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "rollback",
-                "description": "Roll back the system to the previous NixOS generation via nixos-rebuild switch --rollback. Requires confirmation."
+                "description": "Undo a previous apply or roll back to the previous NixOS generation. If audit_id is given, surgically undoes that specific apply. Otherwise does a full generation rollback. Requires confirmation.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "audit_id": { "type": "string", "description": "Audit entry ID to surgically undo (from audit search)" }
+                    }
+                }
             }
         }),
         json!({

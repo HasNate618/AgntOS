@@ -166,9 +166,13 @@ enum Command {
     },
     /// Roll back to the previous NixOS generation, or list generations
     Rollback {
-        /// Action: list (default) or apply (perform rollback)
+        /// Action: list, apply, or undo
         #[arg(default_value = "apply")]
         action: String,
+
+        /// Audit entry ID to undo (for "undo" action)
+        #[arg(long)]
+        undo_id: Option<String>,
 
         /// Config directory (default: /etc/agntos)
         #[arg(long)]
@@ -526,11 +530,17 @@ fn main() {
                 }
             }
         }
-        Command::Rollback { action, config_dir } => {
+        Command::Rollback {
+            action,
+            undo_id,
+            config_dir,
+        } => {
             let result = match action.as_str() {
                 "list" | "list-generations" => rollback::execute_list(config_dir.as_ref()),
                 "apply" | "do" | "" => rollback::execute(config_dir.as_ref()),
-                "undo" | "surgical" => rollback::execute_undo(config_dir.as_ref()),
+                "undo" | "surgical" => {
+                    rollback::execute_undo(config_dir.as_ref(), undo_id.as_deref())
+                }
                 other => Err(format!(
                     "Unknown rollback action: {}. Use 'list', 'apply', or 'undo'",
                     other

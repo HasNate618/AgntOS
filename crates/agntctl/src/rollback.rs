@@ -158,9 +158,9 @@ fn log_rollback(result: Result<(), String>, config_dir: &PathBuf) -> Result<(), 
 }
 
 /// Surgical rollback: reads the last successful apply from the audit log,
-/// reverses its file operations (deletes written files, warns on deleted),
-/// and runs nixos-rebuild.
-pub fn execute_undo(config_dir: Option<&PathBuf>) -> Result<String, String> {
+/// Reverses the file operations of a previous apply. If `undo_id` is given,
+/// it undoes that specific entry; otherwise it undoes the last successful Apply.
+pub fn execute_undo(config_dir: Option<&PathBuf>, undo_id: Option<&str>) -> Result<String, String> {
     use crate::audit::get_log_path;
 
     let dir = config_dir
@@ -170,26 +170,32 @@ pub fn execute_undo(config_dir: Option<&PathBuf>) -> Result<String, String> {
     let log_path = get_log_path(Some(&dir));
     let log = AuditLog::load(&log_path)?;
 
-    // Find the last successful Apply entry
-    let last = log
-        .entries
-        .iter()
-        .rev()
-        .find(|e| {
-            matches!(e.action, AuditAction::Apply { .. })
-                && matches!(e.result, AuditResult::Success { .. })
-        })
-        .ok_or_else(|| "No previous apply found in audit log to undo.".to_string())?;
+    // Find the target entry: by ID if given, otherwise the last successful Apply
+    let target_entry = if let Some(id) = undo_id {
+        log.entries
+            .iter()
+            .find(|e| e.id == id)
+            .ok_or_else(|| format!("Audit entry not found: {}", id))?
+    } else {
+        log.entries
+            .iter()
+            .rev()
+            .find(|e| {
+                matches!(e.action, AuditAction::Apply { .. })
+                    && matches!(e.result, AuditResult::Success { .. })
+            })
+            .ok_or_else(|| "No previous apply found in audit log to undo.".to_string())?
+    };
 
     let mut out = String::new();
     out.push_str(&format!(
         "Undoing apply from {}: {}\n",
-        last.timestamp.format("%Y-%m-%d %H:%M:%S"),
-        last.summary
+        target_entry.timestamp.format("%Y-%m-%d %H:%M:%S"),
+        target_entry.summary
     ));
 
     // Delete files that were written
-    for f in &last.files_written {
+    for f in &target_entry.files_written {
         let path = PathBuf::from(f);
         if path.exists() {
             std::fs::remove_file(&path)
@@ -201,14 +207,14 @@ pub fn execute_undo(config_dir: Option<&PathBuf>) -> Result<String, String> {
     }
 
     // Warn about files that were deleted and can't be restored
-    for f in &last.files_deleted {
+    for f in &target_entry.files_deleted {
         out.push_str(&format!(
             "  Warning:  {} was removed by the original apply and cannot be restored automatically. Run `agntctl propose install/remove` to fix.\n",
             f
         ));
     }
 
-    if last.files_written.is_empty() && last.files_deleted.is_empty() {
+    if target_entry.files_written.is_empty() && target_entry.files_deleted.is_empty() {
         out.push_str("  Nothing to undo — no files were changed by this apply.\n");
     }
 

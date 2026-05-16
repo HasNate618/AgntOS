@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }:
 
 {
-  config = lib.mkIf config.agntos.agent.enable {
+  config = lib.mkIf (config.agntos.enable && config.agntos.agent.enable) {
     systemd.user.services.agntd = {
       description = "AgntOS agent daemon";
       wantedBy = [ "default.target" ];
