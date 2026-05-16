@@ -537,8 +537,12 @@ pub fn execute_tool_call_gui(
                 });
             }
 
+            let start = std::time::Instant::now();
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(50));
+                if start.elapsed().as_secs() > 300 {
+                    return Err("GUI approval timeout (5 min) — proposal not applied.".to_string());
+                }
                 let gate = approval_gate.lock().unwrap();
                 if let Some(ref g) = *gate {
                     if g.resolved {
@@ -587,8 +591,14 @@ pub fn execute_tool_call_gui(
                 });
             }
 
+            let start = std::time::Instant::now();
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(50));
+                if start.elapsed().as_secs() > 300 {
+                    return Err(
+                        "GUI approval timeout (5 min) — rollback not performed.".to_string()
+                    );
+                }
                 let gate = approval_gate.lock().unwrap();
                 if let Some(ref g) = *gate {
                     if g.resolved {

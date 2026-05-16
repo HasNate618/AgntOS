@@ -43,7 +43,9 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use crate::agent::{execute_tool_call_gui, get_pending_proposal_ids, SharedApprovalGate};
 use crate::watchdog::EventSender;
@@ -233,6 +235,10 @@ fn run_socket_mode(socket_path: &str) {
 /// 2. Client sends `chat` messages → server streams tool_calls, tool_results, turn_complete
 /// 3. Client sends `approve`/`dismiss` to gate apply/rollback operations
 /// 4. Client sends `status`/`audit` for queries
+///
+/// Chat processing runs on a separate thread to avoid blocking the reader loop.
+/// The approval gate is shared between the reader (which resolves it on `approve`/`dismiss`)
+/// and the chat thread (which waits on it for apply/rollback).
 fn handle_persistent_session(
     bootstrap: &agent::DaemonBootstrap,
     stream: UnixStream,
@@ -245,6 +251,7 @@ fn handle_persistent_session(
     let reader = BufReader::new(read_stream);
 
     let approval_gate: SharedApprovalGate = Arc::new(Mutex::new(None));
+    let chatting = Arc::new(AtomicBool::new(false));
 
     let session_msg = ServerMessage::SessionReady {
         profile: bootstrap.client.profile_name.clone(),
@@ -275,79 +282,129 @@ fn handle_persistent_session(
 
         match msg {
             ClientMessage::Chat { prompt } => {
-                let inspect_summary = util::capture_inspect("system");
-                let system_prompt =
-                    crate::llm::build_system_prompt(&util::config_dir_str(), &inspect_summary);
-                let mut messages = vec![
-                    json!({"role": "system", "content": system_prompt}),
-                    json!({"role": "user", "content": prompt}),
-                ];
-
-                let mut depth = 0;
-                while depth < 8 {
-                    depth += 1;
-                    let resp = match bootstrap
-                        .runtime
-                        .block_on(bootstrap.client.complete(&messages, &bootstrap.tools))
-                    {
-                        Ok(r) => r,
-                        Err(e) => {
-                            let err_msg = ServerMessage::Error {
-                                message: format!("LLM error: {}", e),
-                            };
-                            let _ =
-                                writeln!(writer, "{}", serde_json::to_string(&err_msg).unwrap());
-                            break;
-                        }
+                if chatting.swap(true, Ordering::SeqCst) {
+                    let err_msg = ServerMessage::Error {
+                        message: "Already processing a chat. Send cancel or wait.".to_string(),
                     };
-                    messages.push(resp.assistant_message.clone());
-
-                    if resp.tool_calls.is_empty() {
-                        let done = ServerMessage::TurnComplete {
-                            content: resp.content,
-                        };
-                        let _ = writeln!(writer, "{}", serde_json::to_string(&done).unwrap());
-                        break;
-                    }
-
-                    for tc in &resp.tool_calls {
-                        let tc_msg = ServerMessage::ToolCall {
-                            id: tc.id.clone(),
-                            name: tc.name.clone(),
-                            args: tc.arguments.clone(),
-                            status: ToolCallStatus::Running,
-                        };
-                        let _ = writeln!(writer, "{}", serde_json::to_string(&tc_msg).unwrap());
-
-                        let result =
-                            execute_tool_call_gui(tc, Some(&prompt), approval_gate.clone());
-
-                        match &result {
-                            Ok(output) => {
-                                let tr_msg = ServerMessage::ToolResult {
-                                    id: tc.id.clone(),
-                                    name: tc.name.clone(),
-                                    output: output.clone(),
-                                    success: true,
-                                };
-                                let _ =
-                                    writeln!(writer, "{}", serde_json::to_string(&tr_msg).unwrap());
-                            }
-                            Err(e) => {
-                                let tr_msg = ServerMessage::ToolResult {
-                                    id: tc.id.clone(),
-                                    name: tc.name.clone(),
-                                    output: e.clone(),
-                                    success: false,
-                                };
-                                let _ =
-                                    writeln!(writer, "{}", serde_json::to_string(&tr_msg).unwrap());
-                            }
-                        }
-                    }
+                    let _ = writeln!(&writer, "{}", serde_json::to_string(&err_msg).unwrap());
+                    continue;
                 }
 
-                *approval_gate.lock().unwrap() = None;
+                let mut writer_clone = writer
+                    .try_clone()
+                    .map_err(|e| format!("write clone failed: {}", e))?;
+                let client = bootstrap.client.clone();
+                let tools = bootstrap.tools.clone();
+                let gate = approval_gate.clone();
+                let busy = chatting.clone();
+                let config_dir = util::config_dir_str();
+                let prompt_clone = prompt.clone();
+
+                thread::spawn(move || {
+                    let runtime = match tokio::runtime::Runtime::new() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            let err = ServerMessage::Error {
+                                message: format!("Runtime error: {}", e),
+                            };
+                            let _ = writeln!(
+                                &mut writer_clone,
+                                "{}",
+                                serde_json::to_string(&err).unwrap()
+                            );
+                            busy.store(false, Ordering::SeqCst);
+                            return;
+                        }
+                    };
+
+                    let inspect_summary = util::capture_inspect("system");
+                    let system_prompt =
+                        crate::llm::build_system_prompt(&config_dir, &inspect_summary);
+                    let mut messages = vec![
+                        json!({"role": "system", "content": system_prompt}),
+                        json!({"role": "user", "content": prompt_clone}),
+                    ];
+
+                    let mut depth = 0;
+                    while depth < 8 {
+                        depth += 1;
+                        let resp = match runtime.block_on(client.complete(&messages, &tools)) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                let err_msg = ServerMessage::Error {
+                                    message: format!("LLM error: {}", e),
+                                };
+                                let _ = writeln!(
+                                    &mut writer_clone,
+                                    "{}",
+                                    serde_json::to_string(&err_msg).unwrap()
+                                );
+                                break;
+                            }
+                        };
+                        messages.push(resp.assistant_message.clone());
+
+                        if resp.tool_calls.is_empty() {
+                            let done = ServerMessage::TurnComplete {
+                                content: resp.content,
+                            };
+                            let _ = writeln!(
+                                &mut writer_clone,
+                                "{}",
+                                serde_json::to_string(&done).unwrap()
+                            );
+                            break;
+                        }
+
+                        for tc in &resp.tool_calls {
+                            let tc_msg = ServerMessage::ToolCall {
+                                id: tc.id.clone(),
+                                name: tc.name.clone(),
+                                args: tc.arguments.clone(),
+                                status: ToolCallStatus::Running,
+                            };
+                            let _ = writeln!(
+                                &mut writer_clone,
+                                "{}",
+                                serde_json::to_string(&tc_msg).unwrap()
+                            );
+
+                            let result = execute_tool_call_gui(tc, Some(&prompt), gate.clone());
+
+                            match &result {
+                                Ok(output) => {
+                                    let tr_msg = ServerMessage::ToolResult {
+                                        id: tc.id.clone(),
+                                        name: tc.name.clone(),
+                                        output: output.clone(),
+                                        success: true,
+                                    };
+                                    let _ = writeln!(
+                                        &mut writer_clone,
+                                        "{}",
+                                        serde_json::to_string(&tr_msg).unwrap()
+                                    );
+                                }
+                                Err(e) => {
+                                    let tr_msg = ServerMessage::ToolResult {
+                                        id: tc.id.clone(),
+                                        name: tc.name.clone(),
+                                        output: e.clone(),
+                                        success: false,
+                                    };
+                                    let _ = writeln!(
+                                        &mut writer_clone,
+                                        "{}",
+                                        serde_json::to_string(&tr_msg).unwrap()
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    *gate.lock().unwrap() = None;
+                    busy.store(false, Ordering::SeqCst);
+                });
             }
             ClientMessage::Approve { proposal_id } => {
                 let mut gate = approval_gate.lock().unwrap();
@@ -414,8 +471,14 @@ fn handle_persistent_session(
                         util::run_agntctl(&["audit", "show", "--json", &id, "--config-dir", &cfg])
                     }
                 };
-                let entries = match cmd {
-                    Ok((stdout, _, _)) => serde_json::from_str(&stdout).unwrap_or_default(),
+                let entries: Vec<serde_json::Value> = match cmd {
+                    Ok((stdout, _, _)) => {
+                        match serde_json::from_str::<serde_json::Value>(&stdout) {
+                            Ok(serde_json::Value::Array(arr)) => arr,
+                            Ok(other) => vec![other],
+                            Err(_) => vec![],
+                        }
+                    }
                     Err(_) => vec![],
                 };
                 let audit_msg = ServerMessage::AuditResponse { entries };
