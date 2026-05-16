@@ -99,9 +99,15 @@ in {
     [Windeco]
     WindowCornerRadius=8
     RoundAllCornersWhenNoBorders=true
-    ThinWindowOutlineStyleActive=WindowOutlineAccentColor
-    ThinWindowOutlineStyleInactive=WindowOutlineAccentWithContrast
+    ThinWindowOutlineStyleActive=WindowOutlineCustomColor
+    ThinWindowOutlineStyleInactive=WindowOutlineCustomWithContrast
+    ThinWindowOutlineCustomColorActive=245,124,72
+    ThinWindowOutlineCustomColorInactive=245,124,72
     ThinWindowOutlineThickness=1.75
+    WindowOutlineCustomColorOpacityActive=100
+    WindowOutlineCustomColorOpacityInactive=60
+    WindowOutlineCustomWithContrastOpacityActive=80
+    WindowOutlineCustomWithContrastOpacityInactive=50
     ShowOutlineNormallyActive=true
     ShowOutlineNormallyInactive=true
     ShowCloseOutlineNormallyActive=true
