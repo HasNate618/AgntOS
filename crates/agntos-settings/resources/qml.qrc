@@ -5,9 +5,5 @@
         <file>StatusPage.qml</file>
         <file>ProposalsPage.qml</file>
         <file>ActivityPage.qml</file>
-        <file>components/MessageBubble.qml</file>
-        <file>components/ToolCallCard.qml</file>
-        <file>components/ApprovalCard.qml</file>
-        <file>components/StatusIndicator.qml</file>
     </qresource>
 </RCC>

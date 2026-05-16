@@ -1,99 +1,55 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.kde.kirigami 2.20 as Kirigami
 
-Kirigami.ApplicationWindow {
+ApplicationWindow {
     id: root
     title: "AgntOS Control Center"
     width: 900
     height: 700
-    minimumWidth: 400
-    minimumHeight: 300
+    visible: true
 
-    property bool connected: appBridge ? appBridge.connected : false
+    property int currentPage: 0
 
-    Connections {
-        target: appBridge
-        function onStatusChanged() { root.connected = appBridge.connected }
+    header: TabBar {
+        id: tabBar
+        currentIndex: root.currentPage
+        onCurrentIndexChanged: root.currentPage = currentIndex
+
+        TabButton { text: "Chat" }
+        TabButton { text: "Status" }
+        TabButton { text: "Proposals" }
+        TabButton { text: "Activity" }
     }
 
-    globalDrawer: Kirigami.GlobalDrawer {
-        title: "AgntOS"
-        titleIcon: "system-run"
+    footer: ToolBar {
+        visible: true
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8
 
-        actions: [
-            Kirigami.Action {
-                text: "Chat"
-                icon.name: "chat-bubbles"
-                onTriggered: pageStack.layers.clear()
-                checked: pageStack.currentIndex === 0
-            },
-            Kirigami.Action {
-                text: "Status"
-                icon.name: "computer"
-                onTriggered: pageStack.layers.clear()
-                checked: pageStack.currentIndex === 1
-            },
-            Kirigami.Action {
-                text: "Proposals"
-                icon.name: "document-edit"
-                onTriggered: pageStack.layers.clear()
-                checked: pageStack.currentIndex === 2
-            },
-            Kirigami.Action {
-                text: "Activity"
-                icon.name: "view-history"
-                onTriggered: pageStack.layers.clear()
-                checked: pageStack.currentIndex === 3
+            Rectangle {
+                width: 10; height: 10; radius: 5
+                color: appBridge.connected ? "#4caf50" : "#f44336"
             }
-        ]
 
-        DrawerFooter {
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: Kirigami.Units.smallSpacing
-
-                StatusIndicator {
-                    connected: root.connected
-                }
-                Label {
-                    text: root.connected ? "Connected" : "Disconnected"
-                    color: root.connected ? "#4caf50" : "#f44336"
-                    font.pointSize: 10
-                }
+            Label {
+                text: appBridge.connected ? "Connected" : "Disconnected"
+                color: appBridge.connected ? "#4caf50" : "#f44336"
+                font.pointSize: 10
             }
+
+            Item { Layout.fillWidth: true }
         }
     }
 
-    pageStack.initialPage: ChatPage {
-        id: chatPage
-        chatModel: appBridge.chatItems
-        isProcessing: appBridge.isProcessing
+    StackLayout {
+        anchors.fill: parent
+        currentIndex: root.currentPage
 
-        function sendChat(text) {
-            appBridge.send_chat(text)
-        }
+        ChatPage { }
+        StatusPage { }
+        ProposalsPage { }
+        ActivityPage { }
     }
-
-    pageStack.extendedLayers: [
-        StatusPage {
-            id: statusPage
-            statusModel: appBridge
-            onRefreshRequested: appBridge.refresh_status()
-        },
-        ProposalsPage {
-            id: proposalsPage
-            proposalModel: appBridge.proposalItems
-            onApply: function(id) { appBridge.approve_proposal(id) }
-            onDismiss: function(id) { appBridge.dismiss_proposal(id) }
-            onRefreshRequested: appBridge.refresh_proposals()
-        },
-        ActivityPage {
-            id: activityPage
-            auditModel: appBridge.auditItems
-            onSearch: function(query) { appBridge.search_audit(query) }
-            onRefreshRequested: appBridge.load_audit(50)
-        }
-    ]
 }

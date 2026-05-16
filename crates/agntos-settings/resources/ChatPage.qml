@@ -1,145 +1,126 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.kde.kirigami 2.20 as Kirigami
 
-Kirigami.ScrollablePage {
+Page {
     id: root
-    title: "Chat"
 
-    property var chatModel: null
-    property bool isProcessing: false
-
-    header: Kirigami.InlineMessage {
-        id: errorMessage
-        visible: false
-        type: Kirigami.MessageType.Error
-        showCloseButton: true
+    Connections {
+        target: appBridge
+        onChatChanged: chatList.positionViewAtEnd()
     }
 
-    actions: [
-        Kirigami.Action {
-            icon.name: "edit-clear"
-            tooltip: "Clear chat"
-            onTriggered: chatModel.clear()
-            enabled: chatModel && chatModel.count > 0
-        }
-    ]
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 4
 
-    ListView {
-        id: chatList
-        model: chatModel
-        clip: true
-        spacing: Kirigami.Units.largeSpacing
-        verticalLayoutDirection: ListView.BottomToTop
+        ScrollView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
 
-        onCountChanged: {
-            if (count > 0) {
-                positionViewAtBeginning()
-            }
-        }
+            ListView {
+                id: chatList
+                model: appBridge.chat_items
+                spacing: 8
+                verticalLayoutDirection: ListView.BottomToTop
 
-        delegate: Item {
-            width: chatList.width
-            height: delegateLoader.height + Kirigami.Units.largeSpacing
+                delegate: Item {
+                    width: chatList.width
+                    height: chatBubble.height + 8
 
-            Loader {
-                id: delegateLoader
-                width: parent.width
-                sourceComponent: {
-                    if (model.entryType === "user") return userComponent
-                    if (model.entryType === "assistant") return assistantComponent
-                    if (model.entryType === "tool_call" || model.entryType === "tool_result") return toolComponent
-                    if (model.entryType === "approval") return approvalComponent
-                    return unknownComponent
+                    Rectangle {
+                        id: chatBubble
+                        anchors { left: entryType === "user" ? undefined : parent.left; right: entryType === "user" ? parent.right : undefined }
+                        anchors.leftMargin: entryType === "user" ? 48 : 8
+                        anchors.rightMargin: entryType === "user" ? 8 : 48
+                        width: Math.min(contentColumn.implicitWidth + 16, parent.width * 0.75)
+                        height: contentColumn.implicitHeight + 16
+                        radius: 8
+                        color: {
+                            if (entryType === "user") return "#3daee9"
+                            if (entryType === "approval") return "#fff3cd"
+                            if (entryType === "tool_call" || entryType === "tool_result") return "#f5f5f5"
+                            return "#ffffff"
+                        }
+                        border.width: entryType === "assistant" ? 1 : 0
+                        border.color: "#cccccc"
+
+                        ColumnLayout {
+                            id: contentColumn
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 4
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: {
+                                    if (entryType === "tool_call") return "🔧 " + (toolName || "") + "..."
+                                    if (entryType === "tool_result") return "✓ " + (toolName || "") + " completed"
+                                    if (entryType === "approval") return "⚠️ Apply " + (proposalId || "") + "?"
+                                    return content || ""
+                                }
+                                wrapMode: Text.Wrap
+                                color: entryType === "user" ? "#ffffff" : "#000000"
+                            }
+
+                            Text {
+                                visible: entryType === "approval"
+                                text: proposalSummary || ""
+                                wrapMode: Text.Wrap
+                                color: "#856404"
+                                Layout.fillWidth: true
+                            }
+
+                            RowLayout {
+                                visible: entryType === "approval"
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Button {
+                                    text: "Approve"
+                                    background: Rectangle { color: "#4caf50"; radius: 4 }
+                                    contentItem: Text { text: "✓ Approve"; color: "#ffffff"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                    onClicked: appBridge.approve_proposal(proposalId)
+                                }
+                                Button {
+                                    text: "Reject"
+                                    background: Rectangle { color: "#f44336"; radius: 4 }
+                                    contentItem: Text { text: "✗ Reject"; color: "#ffffff"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                    onClicked: appBridge.dismiss_proposal(proposalId)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-    }
-
-    footer: ColumnLayout {
-        spacing: Kirigami.Units.smallSpacing
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.smallSpacing
+            Layout.margins: 8
+            spacing: 8
 
             TextField {
                 id: inputField
                 Layout.fillWidth: true
-                placeholderText: isProcessing ? "Waiting for agent..." : "Ask the agent..."
-                enabled: !isProcessing
-                Keys.onReturnPressed: sendMessage()
-                selectByMouse: true
+                placeholderText: appBridge.is_processing ? "Waiting for agent..." : "Ask the agent..."
+                enabled: !appBridge.is_processing
+                onAccepted: sendChat()
             }
 
             Button {
-                icon.name: "send-email"
-                enabled: inputField.text.trim().length > 0 && !isProcessing
-                onClicked: sendMessage()
+                text: "Send"
+                enabled: inputField.text.trim().length > 0 && !appBridge.is_processing
+                onClicked: sendChat()
             }
         }
     }
 
-    function sendMessage() {
+    function sendChat() {
         var text = inputField.text.trim()
         if (text.length === 0) return
         inputField.text = ""
-        if (root.sendChat) {
-            root.sendChat(text)
-        }
-    }
-
-    Component {
-        id: userComponent
-        MessageBubble {
-            text: model.content
-            isUser: true
-            anchors.right: parent.right
-            anchors.rightMargin: Kirigami.Units.largeSpacing
-        }
-    }
-
-    Component {
-        id: assistantComponent
-        MessageBubble {
-            text: model.content
-            isUser: false
-            anchors.left: parent.left
-            anchors.leftMargin: Kirigami.Units.largeSpacing
-            opacity: 0
-            Behavior on opacity { NumberAnimation { duration: 80; easing.type: Easing.OutQuad } }
-            Component.onCompleted: opacity = 1
-        }
-    }
-
-    Component {
-        id: toolComponent
-        ToolCallCard {
-            toolName: model.toolName || ""
-            toolStatus: model.entryType === "tool_call" ? "running" : "done"
-            toolOutput: model.content || ""
-            success: model.toolSuccess || false
-            anchors.left: parent.left
-            anchors.leftMargin: Kirigami.Units.largeSpacing + Kirigami.Units.gridUnit
-        }
-    }
-
-    Component {
-        id: approvalComponent
-        ApprovalCard {
-            proposalId: model.proposalId || ""
-            summary: model.proposalSummary || ""
-            anchors.horizontalCenter: parent.horizontalCenter
-        }
-    }
-
-    Component {
-        id: unknownComponent
-        MessageBubble {
-            text: model.content || "(unknown)"
-            isUser: false
-            anchors.left: parent.left
-        }
+        appBridge.send_chat(text)
     }
 }

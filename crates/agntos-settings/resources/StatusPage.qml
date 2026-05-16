@@ -1,92 +1,101 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.kde.kirigami 2.20 as Kirigami
 
-Kirigami.ScrollablePage {
+Page {
     id: root
     title: "Status"
 
-    property var statusModel: null
-    signal refreshRequested()
+    Connections {
+        target: appBridge
+        onStatusChanged: statusLabel.text = "Updated"
+    }
 
-    actions: [
-        Kirigami.Action {
-            icon.name: "view-refresh"
-            tooltip: "Refresh status"
-            onTriggered: root.refreshRequested()
-        }
-    ]
+    ScrollView {
+        anchors.fill: parent
+        clip: true
 
-    ColumnLayout {
-        spacing: Kirigami.Units.largeSpacing
+        ColumnLayout {
+            spacing: 12
+            anchors.margins: 12
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
 
-        Kirigami.Card {
-            Layout.fillWidth: true
-            title: "Agent"
+            RowLayout {
+                Layout.fillWidth: true
 
-            contentItem: GridLayout {
-                columns: 2
-                columnSpacing: Kirigami.Units.largeSpacing
-                rowSpacing: Kirigami.Units.smallSpacing
-
-                Label { text: "Status:"; font.weight: Font.Bold }
                 Label {
-                    text: statusModel ? (statusModel.connected ? "● Connected" : "○ Disconnected") : "—"
-                    color: statusModel && statusModel.connected ? "#4caf50" : "#f44336"
+                    id: statusLabel
+                    text: "System Status"
+                    font.pointSize: 16
+                    font.weight: Font.Bold
                 }
-                Label { text: "Profile:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.profileName : "—" }
-                Label { text: "Model:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.modelName : "—" }
-                Label { text: "Endpoint:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.endpoint : "—"; elide: Text.ElideRight }
-            }
-        }
 
-        Kirigami.Card {
-            Layout.fillWidth: true
-            title: "System"
+                Item { Layout.fillWidth: true }
 
-            contentItem: GridLayout {
-                columns: 2
-                columnSpacing: Kirigami.Units.largeSpacing
-                rowSpacing: Kirigami.Units.smallSpacing
-
-                Label { text: "CPU:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.cpuInfo : "—" }
-                Label { text: "RAM:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.ramUsed : "—" }
-                Label { text: "Disk:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.diskUsed : "—" }
-                Label { text: "Failed units:"; font.weight: Font.Bold }
-                Label {
-                    text: statusModel ? String(statusModel.failedUnits) : "—"
-                    color: statusModel && statusModel.failedUnits > 0 ? "#f44336" : "#4caf50"
+                Button {
+                    text: "↻ Refresh"
+                    onClicked: appBridge.refresh_status()
                 }
             }
-        }
 
-        Kirigami.Card {
-            Layout.fillWidth: true
-            title: "Watchdog"
+            Pane {
+                Layout.fillWidth: true
+                padding: 12
 
-            contentItem: GridLayout {
-                columns: 2
-                columnSpacing: Kirigami.Units.largeSpacing
-                rowSpacing: Kirigami.Units.smallSpacing
+                ColumnLayout {
+                    spacing: 4
 
-                Label { text: "Interval:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.watchdogInterval + "s" : "—" }
-                Label { text: "Disk threshold:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.watchdogDiskThreshold + "%" : "—" }
-                Label { text: "Alerts:"; font.weight: Font.Bold }
-                Label {
-                    text: statusModel ? String(statusModel.watchdogAlertCount) : "—"
-                    color: statusModel && statusModel.watchdogAlertCount > 0 ? "#ff9800" : "#4caf50"
+                    Label { text: "Agent"; font.weight: Font.Bold; font.pointSize: 14 }
+
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 12
+                        rowSpacing: 4
+                        Layout.fillWidth: true
+
+                        Label { text: "Status:"; font.weight: Font.Bold }
+                        Label {
+                            text: appBridge.connected ? "● Connected" : "○ Disconnected"
+                            color: appBridge.connected ? "#4caf50" : "#f44336"
+                        }
+                        Label { text: "Profile:"; font.weight: Font.Bold }
+                        Label { text: appBridge.profile_name || "—" }
+                        Label { text: "Model:"; font.weight: Font.Bold }
+                        Label { text: appBridge.model_name || "—" }
+                    }
                 }
-                Label { text: "Last check:"; font.weight: Font.Bold }
-                Label { text: statusModel ? statusModel.lastCheckTime : "—" }
+            }
+
+            Pane {
+                Layout.fillWidth: true
+                padding: 12
+
+                ColumnLayout {
+                    spacing: 4
+
+                    Label { text: "System"; font.weight: Font.Bold; font.pointSize: 14 }
+
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 12
+                        rowSpacing: 4
+                        Layout.fillWidth: true
+
+                        Label { text: "CPU:"; font.weight: Font.Bold }
+                        Label { text: appBridge.cpu_info || "—" }
+                        Label { text: "RAM:"; font.weight: Font.Bold }
+                        Label { text: appBridge.ram_used || "—" }
+                        Label { text: "Disk:"; font.weight: Font.Bold }
+                        Label { text: appBridge.disk_used || "—" }
+                        Label { text: "Failed units:"; font.weight: Font.Bold }
+                        Label {
+                            text: appBridge.failed_units || "0"
+                            color: parseInt(appBridge.failed_units) > 0 ? "#f44336" : "#4caf50"
+                        }
+                    }
+                }
             }
         }
     }

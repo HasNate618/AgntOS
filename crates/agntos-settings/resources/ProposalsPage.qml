@@ -1,88 +1,102 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.kde.kirigami 2.20 as Kirigami
 
-Kirigami.ScrollablePage {
+Page {
     id: root
     title: "Proposals"
 
-    property var proposalModel: null
-    property var onApply: null
-    property var onDismiss: null
-    signal refreshRequested()
+    Connections {
+        target: appBridge
+        onProposalsChanged: {}
+    }
 
-    actions: [
-        Kirigami.Action {
-            icon.name: "view-refresh"
-            tooltip: "Refresh proposals"
-            onTriggered: root.refreshRequested()
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: 8
+
+            Label {
+                text: "Proposals"
+                font.pointSize: 16
+                font.weight: Font.Bold
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Button {
+                text: "↻ Refresh"
+                onClicked: appBridge.refresh_proposals()
+            }
         }
-    ]
 
-    Kirigami.CardsListView {
-        model: proposalModel
-        delegate: Kirigami.AbstractCard {
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+        ScrollView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
 
-                RowLayout {
-                    Layout.fillWidth: true
+            ListView {
+                id: proposalList
+                model: appBridge.proposal_items
+                spacing: 8
+                delegate: Pane {
+                    width: proposalList.width
+                    padding: 12
 
-                    Kirigami.Icon {
-                        source: model.status === "pending" ? "document-edit" : "dialog-ok"
-                        implicitWidth: Kirigami.Units.iconSizes.small
-                        implicitHeight: Kirigami.Units.iconSizes.small
-                        color: model.status === "pending" ? Kirigami.Theme.neutralTextColor : "#4caf50"
-                    }
+                    ColumnLayout {
+                        spacing: 4
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: model.proposalId || "?"
-                        font.weight: Font.Bold
-                        font.family: "monospace"
-                    }
+                        RowLayout {
+                            Layout.fillWidth: true
 
-                    Label {
-                        text: model.status || "pending"
-                        color: model.status === "applied" ? "#4caf50" : Kirigami.Theme.neutralTextColor
-                        font.pointSize: 9
-                    }
-                }
+                            Rectangle {
+                                width: 10; height: 10; radius: 5
+                                color: status === "pending" ? "#f5a623" : (status === "applied" ? "#4caf50" : "#888888")
+                            }
 
-                Label {
-                    Layout.fillWidth: true
-                    text: model.summary || ""
-                    wrapMode: Text.Wrap
-                    elide: Text.ElideRight
-                    maximumLineCount: 2
-                }
+                            Label {
+                                Layout.fillWidth: true
+                                text: proposalId || "?"
+                                font.weight: Font.Bold
+                                font.family: "monospace"
+                            }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: model.status === "pending"
-
-                    Button {
-                        text: "Apply"
-                        background: Rectangle {
-                            color: "#4caf50"
-                            radius: Kirigami.Units.smallSpacing
+                            Label {
+                                text: status || "pending"
+                                color: status === "applied" ? "#4caf50" : (status === "pending" ? "#f5a623" : "#888888")
+                                font.pointSize: 9
+                            }
                         }
-                        Kirigami.Theme.textColor: "#ffffff"
-                        onClicked: {
-                            if (root.onApply) root.onApply(model.proposalId)
-                        }
-                    }
 
-                    Button {
-                        text: "Dismiss"
-                        background: Rectangle {
-                            color: Kirigami.Theme.disabledTextColor
-                            radius: Kirigami.Units.smallSpacing
+                        Label {
+                            Layout.fillWidth: true
+                            text: summary || ""
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
                         }
-                        Kirigami.Theme.textColor: "#ffffff"
-                        onClicked: {
-                            if (root.onDismiss) root.onDismiss(model.proposalId)
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: status === "pending"
+                            spacing: 8
+
+                            Button {
+                                text: "Apply"
+                                background: Rectangle { color: "#4caf50"; radius: 4 }
+                                contentItem: Text { text: "Apply"; color: "#ffffff"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                onClicked: appBridge.approve_proposal(proposalId)
+                            }
+
+                            Button {
+                                text: "Dismiss"
+                                background: Rectangle { color: "#888888"; radius: 4 }
+                                contentItem: Text { text: "Dismiss"; color: "#ffffff"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                onClicked: appBridge.dismiss_proposal(proposalId)
+                            }
                         }
                     }
                 }
