@@ -3,10 +3,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-unstable, ... }: let
+  outputs = { self, nixpkgs, ... }: let
     agntosOverlay = final: prev: {
       agntctl = final.callPackage ./pkgs/agntctl { };
       agntd = final.callPackage ./pkgs/agntd { };
@@ -16,7 +15,7 @@
       agntos-wallpapers = final.callPackage ./pkgs/agntos-wallpapers { };
       bart-kde = final.callPackage ./pkgs/bart-kde { };
       winsur-kde = final.callPackage ./pkgs/winsur-kde { };
-      klassy = nixpkgs-unstable.legacyPackages.${final.stdenv.hostPlatform.system}.klassy;
+      klassy = final.callPackage ./pkgs/klassy { };
     };
   in {
     # --- Dev VM ---
