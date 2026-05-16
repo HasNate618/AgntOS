@@ -123,7 +123,7 @@ flowchart LR
 | Component | Role |
 |---|---|
 | **agntd** | LLM-powered agent daemon. Systemd user service. Accepts prompts via REPL or Unix socket. Assembles system prompt from memory + system snapshot + tool definitions. Dispatches tool calls. Persists conversations to SQLite FTS5. |
-| **agntctl** | Stable OS control CLI. All agent tool calls run `agntctl` as a subprocess. Also usable directly by users. 11 tools, zero magic. |
+| **agntctl** | Stable OS control CLI. All agent tool calls run `agntctl` as a subprocess. Also usable directly by users. 10 tools, zero magic. |
 | **agnt-common** | Shared types between agntctl and agntd: `AuditEntry`, `ConfigProposal`, `CoreMemory`, `ModelsConfig`. Serialized as JSON across the subprocess boundary. |
 
 ### The /etc/agntos/ protocol

@@ -27,7 +27,7 @@ Phase 1 complete (foundation + agent loop + general tools + daemon mode + surgic
 - Flake-aware rebuild: `/etc/agntos/flake-info` → `nixos-rebuild --flake <uri> --impure`.
 - Auto-start: systemd user service in dev VM.
 - QEMU VM: boots, SSH on port 2222, shared folder mounts, all tools build and run.
-- 49 tests, zero warnings.
+- 55 tests, zero warnings.
 
 ## Completed (Phase 1 Expansions)
 
@@ -51,7 +51,7 @@ Phase 1 complete (foundation + agent loop + general tools + daemon mode + surgic
 - `propose set <option> <value>`: arbitrary NixOS option templates (string, bool, int, raw).
 - `/etc/agntos/options/` directory imported in base.nix.
 - `files_to_delete`, `files_written`, `files_deleted` tracked in AuditEntry/ConfigProposal.
-- 49 tests, zero warnings.
+- 55 tests, zero warnings.
 - Eval: 14/14 checks passing.
 
 ## Decisions

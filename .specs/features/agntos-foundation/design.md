@@ -186,7 +186,7 @@ Every OS-changing action should record:
 - Rollback hint.
 - Timestamp.
 
-The audit log is JSONL at `/var/log/agntos/audit.jsonl`. Append-only. Read by `agntctl audit`.
+The audit log is JSONL at `/etc/agntos/audit.jsonl` (config-dir default) or `/var/log/agntos/audit.jsonl` (fallback). Append-only. Read by `agntctl audit`.
 
 ## Extension Points
 

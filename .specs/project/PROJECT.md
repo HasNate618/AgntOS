@@ -1,5 +1,7 @@
 # AgntOS Project
 
+**Note: [README.md](../../README.md) is the canonical project overview. This document captures the foundational vision and philosophy. Design decisions, tool catalog, and architecture are maintained in README.md.**
+
 ## What Is AgntOS?
 
 AgntOS is an **AI-native operating system** built on NixOS. It's not a chatbot that runs on Linux — it's an OS where the AI agent is a first-class system component, like the kernel or the display manager.

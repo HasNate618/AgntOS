@@ -88,7 +88,7 @@ User ↔ agntd (llm-powered agent)
 - Every OS mutation is recorded in the audit log with prompt/rationale for provenance.
 - All changes are Nix-backed and rollback-capable (both generation-level and surgical).
 - The stack works end-to-end in the dev VM.
-- 49 tests pass, zero warnings, 14/14 eval checks.
+- 55 tests pass, zero warnings, 14/14 eval checks.
 
 ## Phase 1 Expansions
 
@@ -110,7 +110,7 @@ Status: Complete.
 
 Goal: audit-log surgical undo, `--persist` flag, Nix syntax validation, option-change templates.
 
-Status: Complete. Committed in `f06e353`. 49 tests.
+Status: Complete. Committed in `f06e353`. 55 tests.
 
 ### Expansion D: Memory & Provenance
 

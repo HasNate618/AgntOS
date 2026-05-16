@@ -1,5 +1,7 @@
 # AgntOS Foundation Context
 
+**Note: This document captures early-stage decisions that have since been resolved or superseded. See [STATE.md](../../project/STATE.md) for current decisions and [README.md](../../../README.md) for the project overview.**
+
 ## User Decisions Captured
 
 - Package AgntOS as a full distribution with custom scripts, programs, and configs.

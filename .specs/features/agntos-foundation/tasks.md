@@ -670,7 +670,7 @@ Done when:
 
 ### T401: Provenance fields on AuditEntry
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: Contextual memory (the "why").
 
