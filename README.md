@@ -18,6 +18,7 @@
 - [Tool Catalog](#tool-catalog)
 - [Quick Start](#quick-start)
 - [Agent Usage](#agent-usage)
+- [Contributing](#contributing)
 - [Memory & Provenance](#memory--provenance)
 - [Inspiration](#inspiration)
 - [License](#license)
@@ -231,7 +232,7 @@ export AGNTOS_API_KEY=your-key
 agntd
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for VM management, build instructions, testing, and project structure.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, VM management, testing, and project structure.
 
 ## Agent Usage
 
@@ -322,6 +323,11 @@ agntctl audit search --query "btop"
 ```
 
 The system prompt teaches the agent to use `audit search` when asked "why was X done?".
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, VM management, testing,
+conventions, and how to add new tools. Feature work is tracked in `.specs/`.
 
 ## Inspiration
 
