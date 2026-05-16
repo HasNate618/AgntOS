@@ -453,7 +453,7 @@ General tools:     read_file, write_file, edit_file, run_bash\n",
     )
 }
 
-fn pending_proposals_section(config_dir: &str) -> String {
+pub(crate) fn pending_proposals_section(config_dir: &str) -> String {
     let dir = format!("{}/proposals", config_dir);
     let mut proposals = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -659,4 +659,133 @@ fn finalize_stream_tool_calls(buf: &[StreamToolCall]) -> (Vec<ToolCall>, Vec<Val
         }));
     }
     (tool_calls, raw)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn pending_proposals_empty_when_no_dir() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-none");
+        let _ = fs::remove_dir_all(&tmp);
+        let result = pending_proposals_section(&tmp.to_string_lossy());
+        assert!(result.is_empty(), "expected empty, got: {}", result);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn pending_proposals_empty_when_no_files() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-empty");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("proposals")).unwrap();
+        let result = pending_proposals_section(&tmp.to_string_lossy());
+        assert!(result.is_empty());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn pending_proposals_lists_single_proposal() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-single");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("proposals")).unwrap();
+        fs::write(
+            tmp.join("proposals/p-abc.json"),
+            r#"{"id":"p-abc","summary":"Install nginx"}"#,
+        )
+        .unwrap();
+        let result = pending_proposals_section(&tmp.to_string_lossy());
+        assert!(result.contains("p-abc"));
+        assert!(result.contains("Install nginx"));
+        assert!(!result.is_empty());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn pending_proposals_lists_multiple() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-multi");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("proposals")).unwrap();
+        fs::write(
+            tmp.join("proposals/p-1.json"),
+            r#"{"id":"p-1","summary":"Install nginx"}"#,
+        )
+        .unwrap();
+        fs::write(
+            tmp.join("proposals/p-2.json"),
+            r#"{"id":"p-2","summary":"Enable docker"}"#,
+        )
+        .unwrap();
+        let result = pending_proposals_section(&tmp.to_string_lossy());
+        assert!(result.contains("p-1"));
+        assert!(result.contains("p-2"));
+        assert!(result.contains("Install nginx"));
+        assert!(result.contains("Enable docker"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn pending_proposals_skips_non_json_files() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-skip");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("proposals")).unwrap();
+        fs::write(tmp.join("proposals/readme.txt"), "not a proposal").unwrap();
+        fs::write(
+            tmp.join("proposals/p-valid.json"),
+            r#"{"id":"p-valid","summary":"Install htop"}"#,
+        )
+        .unwrap();
+        let result = pending_proposals_section(&tmp.to_string_lossy());
+        assert!(!result.contains("readme.txt"));
+        assert!(result.contains("p-valid"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn pending_proposals_handles_invalid_json() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-badjson");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("proposals")).unwrap();
+        fs::write(tmp.join("proposals/p-bad.json"), "not valid json").unwrap();
+        let result = pending_proposals_section(&tmp.to_string_lossy());
+        assert!(result.is_empty());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn build_system_prompt_includes_proposals() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-prompt");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("proposals")).unwrap();
+        fs::write(
+            tmp.join("proposals/p-xyz.json"),
+            r#"{"id":"p-xyz","summary":"Test proposal"}"#,
+        )
+        .unwrap();
+        // Also create memory dir for CoreMemory loading
+        fs::create_dir_all(tmp.join("memory")).unwrap();
+        fs::write(tmp.join("memory/MEMORY.md"), "").unwrap();
+        fs::write(tmp.join("memory/USER.md"), "").unwrap();
+
+        let prompt = build_system_prompt(&tmp, "test system");
+        assert!(prompt.contains("Pending proposals"));
+        assert!(prompt.contains("p-xyz"));
+        assert!(prompt.contains("Test proposal"));
+        assert!(prompt.contains("apply/dismiss"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn build_system_prompt_empty_when_no_proposals() {
+        let tmp = std::env::temp_dir().join("agntos-llm-test-emptyprompt");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("memory")).unwrap();
+        fs::write(tmp.join("memory/MEMORY.md"), "").unwrap();
+        fs::write(tmp.join("memory/USER.md"), "").unwrap();
+
+        let prompt = build_system_prompt(&tmp, "test system");
+        assert!(!prompt.contains("Pending proposals"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
 }

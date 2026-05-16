@@ -94,6 +94,11 @@ pub fn start(config_dir: String) {
         POLL_INTERVAL.store(wd_cfg.interval_secs, Ordering::Relaxed);
         DISK_THRESHOLD.store(wd_cfg.disk_threshold_pct, Ordering::Relaxed);
 
+        eprintln!(
+            "[watchdog] config: interval={}s, disk_threshold={}%",
+            wd_cfg.interval_secs, wd_cfg.disk_threshold_pct
+        );
+
         let rt = match tokio::runtime::Runtime::new() {
             Ok(r) => r,
             Err(e) => {
@@ -241,20 +246,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn disk_check_trips_at_configurable_threshold() {
-        DISK_THRESHOLD.store(90, Ordering::Relaxed);
-        let check = &CHECKS[1];
-        assert!((check.tripped_if)("95"));
-        assert!((check.tripped_if)("90"));
-        assert!(!(check.tripped_if)("89"));
-        assert!(!(check.tripped_if)("50"));
-        assert!(!(check.tripped_if)(""));
-
-        DISK_THRESHOLD.store(95, Ordering::Relaxed);
-    }
-
-    #[test]
-    fn disk_check_default_threshold() {
+    fn disk_threshold_atomic_scenarios() {
         DISK_THRESHOLD.store(95, Ordering::Relaxed);
         let check = &CHECKS[1];
         assert!((check.tripped_if)("95"));
@@ -263,6 +255,21 @@ mod tests {
         assert!(!(check.tripped_if)("94"));
         assert!(!(check.tripped_if)(""));
         assert!(!(check.tripped_if)("abc"));
+
+        DISK_THRESHOLD.store(90, Ordering::Relaxed);
+        assert!((check.tripped_if)("95"));
+        assert!((check.tripped_if)("90"));
+        assert!(!(check.tripped_if)("89"));
+
+        DISK_THRESHOLD.store(50, Ordering::Relaxed);
+        assert!((check.tripped_if)("55"));
+        assert!(!(check.tripped_if)("45"));
+
+        DISK_THRESHOLD.store(80, Ordering::Relaxed);
+        assert!((check.tripped_if)("90"));
+        assert!(!(check.tripped_if)("70"));
+
+        DISK_THRESHOLD.store(95, Ordering::Relaxed);
     }
 
     #[test]
@@ -292,17 +299,14 @@ mod tests {
         let dir = std::env::temp_dir().join("agntos-watchdog-config-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-
         std::fs::write(
             dir.join("watchdog.toml"),
             "interval_secs = 60\ndisk_threshold_pct = 85\n",
         )
         .unwrap();
-
         let cfg = load_config(&dir.to_string_lossy());
         assert_eq!(cfg.interval_secs, 60);
         assert_eq!(cfg.disk_threshold_pct, 85);
-
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -311,13 +315,49 @@ mod tests {
         let dir = std::env::temp_dir().join("agntos-watchdog-config-bad-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-
         std::fs::write(dir.join("watchdog.toml"), "interval_secs = not-a-number\n").unwrap();
-
         let cfg = load_config(&dir.to_string_lossy());
         assert_eq!(cfg.interval_secs, 300);
         assert_eq!(cfg.disk_threshold_pct, 95);
-
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn config_accepts_partial_overrides() {
+        let dir = std::env::temp_dir().join("agntos-watchdog-partial-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("watchdog.toml"), "interval_secs = 120\n").unwrap();
+        let cfg = load_config(&dir.to_string_lossy());
+        assert_eq!(cfg.interval_secs, 120);
+        assert_eq!(cfg.disk_threshold_pct, 95);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn config_ignores_unknown_keys() {
+        let dir = std::env::temp_dir().join("agntos-watchdog-unknown-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("watchdog.toml"),
+            "interval_secs = 60\ndisk_threshold_pct = 90\nnotakey = true\n",
+        )
+        .unwrap();
+        let cfg = load_config(&dir.to_string_lossy());
+        assert_eq!(cfg.interval_secs, 60);
+        assert_eq!(cfg.disk_threshold_pct, 90);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn poll_interval_atomic_stores_and_loads() {
+        POLL_INTERVAL.store(60, Ordering::Relaxed);
+        assert_eq!(POLL_INTERVAL.load(Ordering::Relaxed), 60);
+        POLL_INTERVAL.store(300, Ordering::Relaxed);
+        assert_eq!(POLL_INTERVAL.load(Ordering::Relaxed), 300);
+        POLL_INTERVAL.store(0, Ordering::Relaxed);
+        assert_eq!(POLL_INTERVAL.load(Ordering::Relaxed), 0);
+        POLL_INTERVAL.store(300, Ordering::Relaxed);
     }
 }
