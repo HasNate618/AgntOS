@@ -1,10 +1,36 @@
 use crate::llm::LlmClient;
 use crate::util;
+use serde::Deserialize;
 use serde_json::json;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 
-const INTERVAL_SECS: u64 = 300;
-const DISK_THRESHOLD_PCT: u8 = 95;
+fn default_interval() -> u64 {
+    300
+}
+fn default_disk() -> u8 {
+    95
+}
+
+#[derive(Debug, Deserialize)]
+struct WatchdogConfig {
+    #[serde(default = "default_interval")]
+    interval_secs: u64,
+    #[serde(default = "default_disk")]
+    disk_threshold_pct: u8,
+}
+
+impl Default for WatchdogConfig {
+    fn default() -> Self {
+        Self {
+            interval_secs: 300,
+            disk_threshold_pct: 95,
+        }
+    }
+}
+
+static POLL_INTERVAL: AtomicU64 = AtomicU64::new(300);
+static DISK_THRESHOLD: AtomicU8 = AtomicU8::new(95);
 
 struct Check {
     name: &'static str,
@@ -42,11 +68,12 @@ static CHECKS: &[Check] = &[
         name: "disk_critical",
         command: "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'",
         tripped_if: |output| {
+            let threshold = DISK_THRESHOLD.load(Ordering::Relaxed);
             output
                 .trim()
                 .parse::<u8>()
                 .ok()
-                .map_or(false, |pct| pct >= DISK_THRESHOLD_PCT)
+                .map_or(false, |pct| pct >= threshold)
         },
         fetch_logs: |_| String::new(),
     },
@@ -63,6 +90,10 @@ static CHECKS: &[Check] = &[
 
 pub fn start(config_dir: String) {
     std::thread::spawn(move || {
+        let wd_cfg = load_config(&config_dir);
+        POLL_INTERVAL.store(wd_cfg.interval_secs, Ordering::Relaxed);
+        DISK_THRESHOLD.store(wd_cfg.disk_threshold_pct, Ordering::Relaxed);
+
         let rt = match tokio::runtime::Runtime::new() {
             Ok(r) => r,
             Err(e) => {
@@ -79,9 +110,9 @@ pub fn start(config_dir: String) {
             }
         };
 
+        let interval = POLL_INTERVAL.load(Ordering::Relaxed);
         rt.block_on(async move {
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_secs(INTERVAL_SECS));
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval));
             interval.tick().await;
             loop {
                 interval.tick().await;
@@ -91,6 +122,20 @@ pub fn start(config_dir: String) {
             }
         });
     });
+}
+
+fn load_config(config_dir: &str) -> WatchdogConfig {
+    let path = format!("{}/watchdog.toml", config_dir);
+    match std::fs::read_to_string(&path) {
+        Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "[watchdog] invalid watchdog.toml ({}), using defaults: {}",
+                path, e
+            );
+            WatchdogConfig::default()
+        }),
+        Err(_) => WatchdogConfig::default(),
+    }
 }
 
 async fn run_cycle(client: &LlmClient, config_dir: &str) -> Result<(), String> {
@@ -196,7 +241,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn disk_check_trips_at_threshold() {
+    fn disk_check_trips_at_configurable_threshold() {
+        DISK_THRESHOLD.store(90, Ordering::Relaxed);
+        let check = &CHECKS[1];
+        assert!((check.tripped_if)("95"));
+        assert!((check.tripped_if)("90"));
+        assert!(!(check.tripped_if)("89"));
+        assert!(!(check.tripped_if)("50"));
+        assert!(!(check.tripped_if)(""));
+
+        DISK_THRESHOLD.store(95, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn disk_check_default_threshold() {
+        DISK_THRESHOLD.store(95, Ordering::Relaxed);
         let check = &CHECKS[1];
         assert!((check.tripped_if)("95"));
         assert!((check.tripped_if)("99"));
@@ -219,5 +278,46 @@ mod tests {
         let check = &CHECKS[2];
         assert!((check.tripped_if)("Out of memory: Killed process"));
         assert!(!(check.tripped_if)(""));
+    }
+
+    #[test]
+    fn config_loads_defaults_when_no_file() {
+        let cfg = load_config("/tmp/nonexistent-agntos-dir");
+        assert_eq!(cfg.interval_secs, 300);
+        assert_eq!(cfg.disk_threshold_pct, 95);
+    }
+
+    #[test]
+    fn config_loads_from_valid_toml() {
+        let dir = std::env::temp_dir().join("agntos-watchdog-config-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        std::fs::write(
+            dir.join("watchdog.toml"),
+            "interval_secs = 60\ndisk_threshold_pct = 85\n",
+        )
+        .unwrap();
+
+        let cfg = load_config(&dir.to_string_lossy());
+        assert_eq!(cfg.interval_secs, 60);
+        assert_eq!(cfg.disk_threshold_pct, 85);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn config_falls_back_on_invalid_toml() {
+        let dir = std::env::temp_dir().join("agntos-watchdog-config-bad-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        std::fs::write(dir.join("watchdog.toml"), "interval_secs = not-a-number\n").unwrap();
+
+        let cfg = load_config(&dir.to_string_lossy());
+        assert_eq!(cfg.interval_secs, 300);
+        assert_eq!(cfg.disk_threshold_pct, 95);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

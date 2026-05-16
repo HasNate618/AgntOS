@@ -396,7 +396,9 @@ pub fn tool_definitions() -> Vec<Value> {
 }
 
 pub fn build_system_prompt(config_dir: impl AsRef<Path>, inspect_summary: &str) -> String {
-    let memory = CoreMemory::load(config_dir).unwrap_or_else(|_| CoreMemory {
+    let cds = config_dir.as_ref().to_string_lossy().to_string();
+
+    let memory = CoreMemory::load(&cds).unwrap_or_else(|_| CoreMemory {
         memory: String::new(),
         user: String::new(),
         memory_path: "".into(),
@@ -421,9 +423,12 @@ Rules:\n\
 - When asked why a change was made (e.g. \"why is X installed?\"),\n\
   use audit search to retrieve the recorded prompt. Every apply stores\n\
   the user\'s original request in the audit log.\n\
+- Review any pending proposals listed below. Offer to apply plausible ones,\n\
+  dismiss stale ones, or explain why they should not be applied.\n\
 - Explain what you are doing and why. Be concise.\n\
 \n\
 System snapshot:\n{}\n\
+{}\
 \n\
 MEMORY.md ({}% used):\n{}\n\
 \n\
@@ -432,6 +437,7 @@ USER.md ({}% used):\n{}\n\
 Core tools (Nix):  inspect, propose, apply, rollback, audit, memory\n\
 General tools:     read_file, write_file, edit_file, run_bash\n",
         inspect_summary.trim(),
+        pending_proposals_section(&cds),
         memory.usage_percent(MemoryFile::Memory),
         if memory.memory.trim().is_empty() {
             "(empty)"
@@ -444,6 +450,32 @@ General tools:     read_file, write_file, edit_file, run_bash\n",
         } else {
             memory.user.trim()
         }
+    )
+}
+
+fn pending_proposals_section(config_dir: &str) -> String {
+    let dir = format!("{}/proposals", config_dir);
+    let mut proposals = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(false, |e| e == "json") {
+                if let Ok(raw) = std::fs::read_to_string(&path) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                        let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("?");
+                        let summary = v.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+                        proposals.push(format!("  - {}: {}", id, summary));
+                    }
+                }
+            }
+        }
+    }
+    if proposals.is_empty() {
+        return String::new();
+    }
+    format!(
+        "Pending proposals (not yet applied — review and apply/dismiss):\n{}\n",
+        proposals.join("\n")
     )
 }
 
