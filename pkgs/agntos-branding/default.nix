@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, callPackage }:
+{ lib, stdenvNoCC, callPackage, agntos-wallpapers }:
 
 stdenvNoCC.mkDerivation {
   pname = "agntos-branding";
@@ -6,10 +6,6 @@ stdenvNoCC.mkDerivation {
   dontUnpack = true;
 
   installPhase = ''
-    mkdir -p $out/share/wallpapers/agntos
-    install -m 644 ${./wallpapers/default.png} $out/share/wallpapers/agntos/default.png
-    install -m 644 ${./wallpapers/install.png} $out/share/wallpapers/agntos/install.png
-
     mkdir -p $out/share/agntos
     install -m 644 ${./fastfetch-config.jsonc} $out/share/agntos/fastfetch-config.jsonc
 
@@ -22,11 +18,13 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images
     install -m 644 ${./splash/metadata.desktop} $out/share/plasma/look-and-feel/agntos-splash/metadata.desktop
     install -m 644 ${./splash/contents/splash/Splash.qml} $out/share/plasma/look-and-feel/agntos-splash/contents/splash/Splash.qml
-    install -m 644 ${./splash/contents/splash/images/background.png} $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images/background.png
+    install -m 644 ${agntos-wallpapers}/share/wallpapers/agntos/agntos-bg-1.jpg \
+      $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images/background.jpg
     install -m 644 ${./splash/contents/splash/images/logo.png} $out/share/plasma/look-and-feel/agntos-splash/contents/splash/images/logo.png
     # Preview
     mkdir -p $out/share/plasma/look-and-feel/agntos-splash/contents/previews
-    install -m 644 ${./splash/contents/splash/images/background.png} $out/share/plasma/look-and-feel/agntos-splash/contents/previews/splash.png
+    install -m 644 ${agntos-wallpapers}/share/wallpapers/agntos/agntos-bg-1.jpg \
+      $out/share/plasma/look-and-feel/agntos-splash/contents/previews/splash.jpg
 
     # Plymouth theme
     mkdir -p $out/share/plymouth/themes/agntos

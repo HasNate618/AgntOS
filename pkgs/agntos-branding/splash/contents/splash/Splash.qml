@@ -4,7 +4,7 @@ Rectangle {
     color: "#141416"
     
     Image {
-        source: "images/background.png"
+        source: "images/background.jpg"
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
     }

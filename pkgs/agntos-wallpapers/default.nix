@@ -3,14 +3,12 @@
 stdenvNoCC.mkDerivation {
   pname = "agntos-wallpapers";
   version = "1.0";
-
-  src = ./wallpapers;
-
+  dontUnpack = true;
   dontBuild = true;
 
   installPhase = ''
     mkdir -p $out/share/wallpapers/agntos
-    cp -r $src/* $out/share/wallpapers/agntos/
+    cp -r ${./wallpapers}/* $out/share/wallpapers/agntos/
   '';
 
   meta = {
