@@ -39,9 +39,15 @@ mod watchdog;
 use agent::LlmSession;
 use serde_json::json;
 use session::SessionStore;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
+use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+use crate::agent::{execute_tool_call_gui, get_pending_proposal_ids, SharedApprovalGate};
+use crate::watchdog::EventSender;
+use agnt_common::wire::{AuditRequestAction, ClientMessage, ServerMessage, ToolCallStatus};
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
@@ -127,9 +133,14 @@ fn run_repl() {
     }
 }
 
-/// Runs the socket / daemon mode — listens on a Unix domain socket for one-shot
-/// JSON requests.  Each connection reads a `{"prompt": "..."}` and returns
-/// `{"response": "..."}` or `{"error": "..."}`.
+/// Runs the socket / daemon mode — listens on a Unix domain socket.
+///
+/// Detects between:
+/// - Legacy one-shot `{"prompt": "..."}` requests (backward compatible)
+/// - Typed `{"type": "init", ...}` messages (persistent session protocol)
+///
+/// For persistent sessions, each connection exchanges NDJSON lines over
+/// a long-lived connection.
 fn run_socket_mode(socket_path: &str) {
     // Ensure parent directory exists
     if let Some(parent) = Path::new(socket_path).parent() {
@@ -154,6 +165,8 @@ fn run_socket_mode(socket_path: &str) {
         }
     };
 
+    // Create the event broadcast channel and start watchdog with events
+    let event_tx = watchdog::create_event_channel();
     watchdog::start(util::config_dir_str());
 
     println!(
@@ -162,7 +175,7 @@ fn run_socket_mode(socket_path: &str) {
     );
 
     for stream in listener.incoming() {
-        let mut stream = match stream {
+        let stream = match stream {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("agntd: connection error: {}", e);
@@ -170,26 +183,262 @@ fn run_socket_mode(socket_path: &str) {
             }
         };
 
-        let mut buf = String::new();
-        if let Err(e) = stream.read_to_string(&mut buf) {
-            eprintln!("agntd: read error: {}", e);
+        // Read the first message to determine protocol
+        let mut reader = BufReader::new(&stream);
+        let mut first_line = String::new();
+        if reader.read_line(&mut first_line).map_or(true, |n| n == 0) {
             continue;
         }
+        let first_line = first_line.trim().to_string();
 
-        let response = match serde_json::from_str::<serde_json::Value>(&buf) {
-            Ok(req) => match req.get("prompt").and_then(|v| v.as_str()) {
-                Some(prompt) => match agent::process_prompt(prompt, &bootstrap) {
-                    Ok(text) => json!({"response": text}),
-                    Err(e) => json!({"error": e}),
+        if agnt_common::wire::is_legacy_prompt(&first_line) {
+            // Legacy one-shot path — backward compatible
+            let response = match serde_json::from_str::<serde_json::Value>(&first_line) {
+                Ok(req) => match req.get("prompt").and_then(|v| v.as_str()) {
+                    Some(prompt) => match agent::process_prompt(prompt, &bootstrap) {
+                        Ok(text) => json!({"response": text}),
+                        Err(e) => json!({"error": e}),
+                    },
+                    None => json!({"error": "Missing 'prompt' field"}),
                 },
-                None => json!({"error": "Missing 'prompt' field"}),
-            },
-            Err(_) => json!({"error": "Invalid JSON"}),
+                Err(_) => json!({"error": "Invalid JSON"}),
+            };
+            let payload = response.to_string();
+            let _ = write!(&stream, "{}", payload);
+        } else {
+            // Persistent session path
+            match serde_json::from_str::<ClientMessage>(&first_line) {
+                Ok(ClientMessage::Init { .. }) => {
+                    if let Err(e) = handle_persistent_session(&bootstrap, stream, &event_tx) {
+                        eprintln!("agntd: session error: {}", e);
+                    }
+                }
+                Ok(_) => {
+                    let err = json!({"error": "Expected init message first"});
+                    let _ = write!(&stream, "{}", err.to_string());
+                }
+                Err(e) => {
+                    let err = json!({"error": format!("Invalid JSON: {}", e)});
+                    let _ = write!(&stream, "{}", err.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Handles a persistent NDJSON session over a Unix domain socket.
+///
+/// Protocol:
+/// 1. Server sends `session_ready` with profile/model/pending proposals
+/// 2. Client sends `chat` messages → server streams tool_calls, tool_results, turn_complete
+/// 3. Client sends `approve`/`dismiss` to gate apply/rollback operations
+/// 4. Client sends `status`/`audit` for queries
+fn handle_persistent_session(
+    bootstrap: &agent::DaemonBootstrap,
+    stream: UnixStream,
+    _event_tx: &EventSender,
+) -> Result<(), String> {
+    let read_stream = stream
+        .try_clone()
+        .map_err(|e| format!("Failed to clone stream: {}", e))?;
+    let mut writer = stream;
+    let reader = BufReader::new(read_stream);
+
+    let approval_gate: SharedApprovalGate = Arc::new(Mutex::new(None));
+
+    let session_msg = ServerMessage::SessionReady {
+        profile: bootstrap.client.profile_name.clone(),
+        model: bootstrap.client.profile.model.clone(),
+        pending_proposals: get_pending_proposal_ids(&util::config_dir_str()),
+    };
+    writeln!(writer, "{}", serde_json::to_string(&session_msg).unwrap())
+        .map_err(|e| format!("write error: {}", e))?;
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let msg: ClientMessage = match serde_json::from_str(&line) {
+            Ok(m) => m,
+            Err(e) => {
+                let err_msg = ServerMessage::Error {
+                    message: format!("Invalid message: {}", e),
+                };
+                let _ = writeln!(writer, "{}", serde_json::to_string(&err_msg).unwrap());
+                continue;
+            }
         };
 
-        let payload = response.to_string();
-        let _ = stream.write_all(payload.as_bytes());
+        match msg {
+            ClientMessage::Chat { prompt } => {
+                let inspect_summary = util::capture_inspect("system");
+                let system_prompt =
+                    crate::llm::build_system_prompt(&util::config_dir_str(), &inspect_summary);
+                let mut messages = vec![
+                    json!({"role": "system", "content": system_prompt}),
+                    json!({"role": "user", "content": prompt}),
+                ];
+
+                let mut depth = 0;
+                while depth < 8 {
+                    depth += 1;
+                    let resp = match bootstrap
+                        .runtime
+                        .block_on(bootstrap.client.complete(&messages, &bootstrap.tools))
+                    {
+                        Ok(r) => r,
+                        Err(e) => {
+                            let err_msg = ServerMessage::Error {
+                                message: format!("LLM error: {}", e),
+                            };
+                            let _ =
+                                writeln!(writer, "{}", serde_json::to_string(&err_msg).unwrap());
+                            break;
+                        }
+                    };
+                    messages.push(resp.assistant_message.clone());
+
+                    if resp.tool_calls.is_empty() {
+                        let done = ServerMessage::TurnComplete {
+                            content: resp.content,
+                        };
+                        let _ = writeln!(writer, "{}", serde_json::to_string(&done).unwrap());
+                        break;
+                    }
+
+                    for tc in &resp.tool_calls {
+                        let tc_msg = ServerMessage::ToolCall {
+                            id: tc.id.clone(),
+                            name: tc.name.clone(),
+                            args: tc.arguments.clone(),
+                            status: ToolCallStatus::Running,
+                        };
+                        let _ = writeln!(writer, "{}", serde_json::to_string(&tc_msg).unwrap());
+
+                        let result =
+                            execute_tool_call_gui(tc, Some(&prompt), approval_gate.clone());
+
+                        match &result {
+                            Ok(output) => {
+                                let tr_msg = ServerMessage::ToolResult {
+                                    id: tc.id.clone(),
+                                    name: tc.name.clone(),
+                                    output: output.clone(),
+                                    success: true,
+                                };
+                                let _ =
+                                    writeln!(writer, "{}", serde_json::to_string(&tr_msg).unwrap());
+                            }
+                            Err(e) => {
+                                let tr_msg = ServerMessage::ToolResult {
+                                    id: tc.id.clone(),
+                                    name: tc.name.clone(),
+                                    output: e.clone(),
+                                    success: false,
+                                };
+                                let _ =
+                                    writeln!(writer, "{}", serde_json::to_string(&tr_msg).unwrap());
+                            }
+                        }
+                    }
+                }
+
+                *approval_gate.lock().unwrap() = None;
+            }
+            ClientMessage::Approve { proposal_id } => {
+                let mut gate = approval_gate.lock().unwrap();
+                if let Some(ref mut g) = *gate {
+                    if g.proposal_id == proposal_id {
+                        g.resolved = true;
+                        g.approved = true;
+                    }
+                }
+            }
+            ClientMessage::Dismiss {
+                proposal_id,
+                reason: _,
+            } => {
+                let mut gate = approval_gate.lock().unwrap();
+                if let Some(ref mut g) = *gate {
+                    if g.proposal_id == proposal_id {
+                        g.resolved = true;
+                        g.approved = false;
+                    }
+                }
+            }
+            ClientMessage::Status { target } => {
+                let output = util::capture_inspect(&target);
+                let status_msg = ServerMessage::StatusResponse {
+                    target: target.clone(),
+                    data: serde_json::json!({"output": output}),
+                };
+                let _ = writeln!(writer, "{}", serde_json::to_string(&status_msg).unwrap());
+            }
+            ClientMessage::Audit {
+                action,
+                query,
+                id,
+                limit,
+            } => {
+                let cfg = util::config_dir_str();
+                let cmd = match action {
+                    AuditRequestAction::List => util::run_agntctl(&[
+                        "audit",
+                        "list",
+                        "--json",
+                        "--limit",
+                        &limit.to_string(),
+                        "--config-dir",
+                        &cfg,
+                    ]),
+                    AuditRequestAction::Search => {
+                        let q = query.unwrap_or_default();
+                        util::run_agntctl(&[
+                            "audit",
+                            "search",
+                            "--json",
+                            "--query",
+                            &q,
+                            "--limit",
+                            &limit.to_string(),
+                            "--config-dir",
+                            &cfg,
+                        ])
+                    }
+                    AuditRequestAction::Show => {
+                        let id = id.unwrap_or_default();
+                        util::run_agntctl(&["audit", "show", "--json", &id, "--config-dir", &cfg])
+                    }
+                };
+                let entries = match cmd {
+                    Ok((stdout, _, _)) => serde_json::from_str(&stdout).unwrap_or_default(),
+                    Err(_) => vec![],
+                };
+                let audit_msg = ServerMessage::AuditResponse { entries };
+                let _ = writeln!(writer, "{}", serde_json::to_string(&audit_msg).unwrap());
+            }
+            ClientMessage::Cancel {} => {
+                let cancel_msg = ServerMessage::TurnComplete {
+                    content: "(cancelled)".to_string(),
+                };
+                let _ = writeln!(writer, "{}", serde_json::to_string(&cancel_msg).unwrap());
+            }
+            ClientMessage::Init { .. } => {
+                let ready_msg = ServerMessage::SessionReady {
+                    profile: bootstrap.client.profile_name.clone(),
+                    model: bootstrap.client.profile.model.clone(),
+                    pending_proposals: get_pending_proposal_ids(&util::config_dir_str()),
+                };
+                let _ = writeln!(writer, "{}", serde_json::to_string(&ready_msg).unwrap());
+            }
+        }
     }
+
+    Ok(())
 }
 
 // ── LLM session bootstrap ────────────────────────────────────────────────────

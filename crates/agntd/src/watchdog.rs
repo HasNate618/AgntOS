@@ -1,9 +1,18 @@
 use crate::llm::LlmClient;
 use crate::util;
+use agnt_common::wire::ServerMessage;
 use serde::Deserialize;
 use serde_json::json;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use tokio::sync::broadcast;
+
+pub type EventSender = broadcast::Sender<ServerMessage>;
+
+pub fn create_event_channel() -> EventSender {
+    let (tx, _) = broadcast::channel(32);
+    tx
+}
 
 fn default_interval() -> u64 {
     300

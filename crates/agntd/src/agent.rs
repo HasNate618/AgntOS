@@ -19,6 +19,21 @@ use crate::llm::{LlmClient, ToolCall};
 use crate::session::SessionStore;
 use crate::util;
 use serde_json::{json, Value};
+use std::sync::{Arc, Mutex};
+
+/// Approval gate for GUI-driven confirmations. The persistent session handler
+/// sets resolved/approved when the user responds via Approve/Dismiss messages.
+pub struct ApprovalGate {
+    pub proposal_id: String,
+    #[allow(dead_code)]
+    pub tool_call_id: String,
+    #[allow(dead_code)]
+    pub summary: String,
+    pub resolved: bool,
+    pub approved: bool,
+}
+
+pub type SharedApprovalGate = Arc<Mutex<Option<ApprovalGate>>>;
 
 /// Encapsulates the mutable state that an LLM-powered agent session needs.
 pub struct LlmSession {
@@ -494,6 +509,138 @@ Do NOT retry — tell the user to run 'agntctl rollback apply' if they want to p
     }
 }
 
+/// Like execute_tool_call but uses an ApprovalGate instead of stdin for confirmations.
+/// Used by the persistent session handler to gate apply/rollback via GUI messages.
+pub fn execute_tool_call_gui(
+    tc: &ToolCall,
+    user_prompt: Option<&str>,
+    approval_gate: SharedApprovalGate,
+) -> Result<String, String> {
+    let cfg = util::config_dir_str();
+    let args = tc.arguments.as_object().cloned().unwrap_or_default();
+
+    match tc.name.as_str() {
+        "apply" => {
+            let proposal_id = args
+                .get("proposal_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required argument: proposal_id".to_string())?;
+
+            {
+                let mut gate = approval_gate.lock().unwrap();
+                *gate = Some(ApprovalGate {
+                    proposal_id: proposal_id.to_string(),
+                    tool_call_id: tc.id.clone(),
+                    summary: format!("Apply proposal {}", proposal_id),
+                    resolved: false,
+                    approved: false,
+                });
+            }
+
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                let gate = approval_gate.lock().unwrap();
+                if let Some(ref g) = *gate {
+                    if g.resolved {
+                        if g.approved {
+                            break;
+                        } else {
+                            return Ok(format!(
+                                "APPLICATION_REJECTED: User declined proposal {}. Do NOT retry.",
+                                proposal_id
+                            ));
+                        }
+                    }
+                }
+            }
+
+            let no_rebuild = args
+                .get("no_rebuild")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if no_rebuild {
+                command_result(util::run_agntctl(&[
+                    "apply",
+                    "--no-rebuild",
+                    "--config-dir",
+                    &cfg,
+                    proposal_id,
+                ]))
+            } else {
+                command_result(util::run_agntctl(&[
+                    "apply",
+                    "--config-dir",
+                    &cfg,
+                    proposal_id,
+                ]))
+            }
+        }
+        "rollback" => {
+            {
+                let mut gate = approval_gate.lock().unwrap();
+                *gate = Some(ApprovalGate {
+                    proposal_id: String::new(),
+                    tool_call_id: tc.id.clone(),
+                    summary: "Roll back to previous NixOS generation".to_string(),
+                    resolved: false,
+                    approved: false,
+                });
+            }
+
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                let gate = approval_gate.lock().unwrap();
+                if let Some(ref g) = *gate {
+                    if g.resolved {
+                        if g.approved {
+                            break;
+                        } else {
+                            return Ok("ROLLBACK_REJECTED: User declined rollback. Do NOT retry."
+                                .to_string());
+                        }
+                    }
+                }
+            }
+
+            let audit_id = args.get("audit_id").and_then(|v| v.as_str());
+            let mut cmd = vec!["rollback", "--config-dir", &cfg];
+            match audit_id {
+                Some(id) if !id.is_empty() => {
+                    cmd.push("undo");
+                    cmd.push("--undo-id");
+                    cmd.push(id);
+                }
+                _ => {
+                    cmd.push("apply");
+                }
+            }
+            command_result(util::run_agntctl(&cmd))
+        }
+        _other => execute_tool_call(tc, user_prompt),
+    }
+}
+
+/// Reads pending proposal IDs from the proposals directory for the session_ready message.
+pub fn get_pending_proposal_ids(config_dir: &str) -> Vec<String> {
+    let dir = format!("{}/proposals", config_dir);
+    let mut ids = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(false, |e| e == "json") {
+                if let Ok(raw) = std::fs::read_to_string(&path) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                        if let Some(id) = v.get("id").and_then(|i| i.as_str()) {
+                            ids.push(id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ids
+}
+
 /// Wraps the (stdout, stderr, success) tuple from `agntctl` into a single string
 /// suitable for feeding back to the LLM as a tool result.  Errors become `Err` so
 /// the LLM sees `TOOL_ERROR:` instead of a success string.
@@ -715,4 +862,85 @@ fn handle_history_command(query: &str, state: &LlmSession) -> Result<(), String>
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn approval_gate_default_is_none() {
+        let gate: SharedApprovalGate = Arc::new(Mutex::new(None));
+        let g = gate.lock().unwrap();
+        assert!(g.is_none());
+    }
+
+    #[test]
+    fn approval_gate_set_and_resolve() {
+        let gate: SharedApprovalGate = Arc::new(Mutex::new(None));
+        {
+            let mut g = gate.lock().unwrap();
+            *g = Some(ApprovalGate {
+                proposal_id: "p-test".to_string(),
+                tool_call_id: "tc-1".to_string(),
+                summary: "Test".to_string(),
+                resolved: false,
+                approved: false,
+            });
+        }
+        {
+            let mut g = gate.lock().unwrap();
+            let g_ref = g.as_mut().unwrap();
+            g_ref.resolved = true;
+            g_ref.approved = true;
+        }
+        {
+            let g = gate.lock().unwrap();
+            assert!(g.as_ref().unwrap().resolved);
+            assert!(g.as_ref().unwrap().approved);
+        }
+    }
+
+    #[test]
+    fn get_pending_proposal_ids_empty_when_no_dir() {
+        let tmp = std::env::temp_dir().join("agntos-test-proposals-none");
+        let _ = std::fs::remove_dir_all(&tmp);
+        let ids = get_pending_proposal_ids(&tmp.to_string_lossy());
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn get_pending_proposal_ids_reads_valid_proposals() {
+        let tmp = std::env::temp_dir().join("agntos-test-proposals-valid");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("proposals")).unwrap();
+        std::fs::write(
+            tmp.join("proposals/p-abc123.json"),
+            r#"{"id":"p-abc123","summary":"test"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.join("proposals/p-def456.json"),
+            r#"{"id":"p-def456","summary":"test2"}"#,
+        )
+        .unwrap();
+        let ids = get_pending_proposal_ids(&tmp.to_string_lossy());
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"p-abc123".to_string()));
+        assert!(ids.contains(&"p-def456".to_string()));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn get_pending_proposal_ids_skips_invalid_json() {
+        let tmp = std::env::temp_dir().join("agntos-test-proposals-invalid");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("proposals")).unwrap();
+        std::fs::write(tmp.join("proposals/p-bad.json"), r#"not valid json"#).unwrap();
+        std::fs::write(tmp.join("proposals/p-good.json"), r#"{"id":"p-good"}"#).unwrap();
+        let ids = get_pending_proposal_ids(&tmp.to_string_lossy());
+        assert_eq!(ids.len(), 1);
+        assert_eq!(ids[0], "p-good");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
