@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1 complete (foundation + agent loop + general tools + daemon mode + surgical rollback). Phase 1 expansions underway (memory/provenance, watchdogs). Phase 2 (model management) is next.
+Phase 3 v1 (Kirigami Settings GUI) complete. Next: Phase 3.2 (model routing page, memory viewer, cxx-qt bridge) or Track B (secure API key storage).
 
 ## Completed (Phase 0)
 
@@ -79,6 +79,64 @@ Phase 1 complete (foundation + agent loop + general tools + daemon mode + surgic
 - Hardware-aware model recommendations via inspect.
 - API keys remain env-var based (`api_key_env` field).
 - 65 tests, zero warnings.
+
+## Completed (Phase 3 v1 — Kirigami Settings)
+
+### Overview
+
+Phase 3 v1 delivers the first Kirigami GUI for AgntOS: a chat-driven control center with dashboard pages for status, proposals, and audit history. The architecture uses a bidirectional NDJSON protocol over persistent Unix domain socket connections to agntd.
+
+### Components
+
+**agntos-settings crate** (`crates/agntos-settings/`):
+- QML UI files using Kirigami 2.20: main window with global drawer, ChatPage, StatusPage, ProposalsPage, ActivityPage.
+- Rust backend: Unix socket connection with exponential backoff reconnect, NDJSON protocol codec, session state machine.
+- Data models: ChatModel (streaming tokens, tool call lifecycle, approval gating), ProposalModel (reads /etc/agntos/proposals/), StatusModel (agent/system/watchdog state), AuditModel (parses audit.jsonl entries).
+- 24 unit tests + 6 integration tests = 30 total.
+- Nix package and NixOS module (`agntos.settings.enable`).
+
+**agntd protocol extension**:
+- Persistent session mode: NDJSON loop alongside legacy one-shot protocol.
+- Approval gate: `Arc<Mutex<Option<ApprovalGate>>>` shared between reader thread and chat processing thread.
+- Chat turns execute in a separate thread to avoid blocking the reader loop.
+- Spin-wait with 5-minute timeout prevents resource leaks on disconnect.
+- 27 tests (22 existing + 5 new).
+
+**Shared wire protocol** (`agnt_common::wire`):
+- 7 ClientMessage types (init, chat, approve, dismiss, status, audit, cancel).
+- 10 ServerMessage types (session_ready, status_response, token, tool_call, tool_result, approval_request, turn_complete, audit_response, event, error).
+- 6 roundtrip/edge-case tests.
+
+### Key Decisions
+
+- **NDJSON over Unix socket** — stays true to "bash is king" philosophy, backward compatible with socat/scripts.
+- **Separate thread for chat processing** — avoids deadlock between approval gate wait and reader loop.
+- **Plain Rust structs for data models** — QML binding (cxx-qt/qmetaobject) deferred to Phase 3.2; models are testable and complete.
+- **Approval gate with timeout** — 5-minute max wait, client disconnect handled gracefully.
+- **QML pages as standalone files** — loaded by Qt runtime; no build-time code generation.
+
+### Wire Protocol
+
+Client → Server: `{"type":"init"}`, `{"type":"chat","prompt":"..."}`, `{"type":"approve","proposal_id":"p-..."}`, `{"type":"status","target":"system"}`, `{"type":"audit","action":"list",...}`, `{"type":"cancel"}`
+
+Server → Client: streaming `token` messages, `tool_call` with status transitions (Running→Done), `tool_result`, `approval_request`, `turn_complete`, `event`, `audit_response`, `status_response`, `session_ready`, `error`
+
+Backward compat: existing one-shot `{"prompt":"..."}` → `{"response":"..."}` still works without changes.
+
+### Test Results
+
+- agnt_common: 12 tests (6 existing + 6 wire protocol)
+- agntd: 27 tests (22 existing + 5 approval gate/proposals)
+- agntos-settings: 30 tests (24 unit + 6 integration)
+- Total: 69 tests passing
+
+### What's Deferred to Phase 3.2
+
+- Model routing configuration page (`agntctl model` CLI suffices)
+- Memory viewer/editor (`agntctl memory` CLI suffices)
+- cxx-qt bridge for direct Rust↔QML bindings (QML files are ready, Rust models are ready, bridge code is TBD)
+- Push event wiring from watchdog to GUI (EventSender scaffolded in agent.rs, not yet producing events)
+- Multiple simultaneous GUI connections (v1 supports one per socket path)
 
 ## Decisions
 

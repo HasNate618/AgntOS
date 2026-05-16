@@ -171,17 +171,47 @@ Status: Complete (CLI). UI deferred to Phase 3.
 
 Goal: polished interface for agent configuration.
 
-Deliverables:
-- Agent status page.
-- Model routing page.
-- Local model management page.
-- Permissions page.
-- Skills page.
-- Activity/audit log viewer.
+### Phase 3 Architecture
 
-Exit criteria:
-- Normal users can configure AgntOS without editing files.
-- Power users can inspect where settings are stored.
+```
+agntos-settings (QML + Rust via cxx-qt)
+     ↕ NDJSON over persistent Unix socket
+agntd (persistent session handler)
+     ↕ tools + LLM + agntctl
+/etc/agntos/ (config, proposals, audit, memory)
+```
+
+### Deliverables (v1)
+
+- Chat interface with streaming, tool call cards, and approval buttons.
+- Agent status dashboard (model profile, system state, watchdog health).
+- Pending proposals manager (apply/dismiss list).
+- Activity/audit log viewer (searchable timeline with rollback actions).
+
+### Wire Protocol
+
+Bidirectional NDJSON over Unix domain socket (`--socket <path>`):
+- Client sends: init, chat, approve, dismiss, status, audit, cancel
+- Server sends: session_ready, status_response, token, tool_call, tool_result,
+  approval_request, turn_complete, audit_response, event, error
+- Backward compatible: legacy one-shot `{"prompt":"..."}` still works
+
+### Exit Criteria
+
+- User can chat with the agent through the GUI with streamed responses.
+- Tool calls render as inline cards (spinner during execution, expandable results).
+- Approval-gated tools show Approve/Reject buttons in the chat.
+- Status page shows agent connection, system info, and watchdog state.
+- Proposals page lists pending proposals with Apply/Dismiss actions.
+- Activity page shows audit timeline with search, details, and rollback.
+- Backward compat: existing one-shot socket protocol still works for scripts.
+
+### Deferred to Phase 3.2
+
+- Model routing and configuration page (`agntctl model` CLI suffices).
+- Memory viewer/editor (`agntctl memory` CLI suffices).
+- Watchdog configuration GUI (CLI via `edit_file` suffices).
+- Permissions and skills management pages.
 
 ## Phase 4: Full Distro Packaging
 
@@ -274,10 +304,12 @@ Exit criteria:
 
 ### Phase 3 -- Kirigami Settings Experience
 
-- [ ] Agent status page
-- [ ] Model routing page
-- [ ] Activity/audit log viewer
-- [ ] Permissions and skills management
+- [x] Chat interface with streaming and tool cards
+- [x] Status dashboard
+- [x] Proposals manager
+- [x] Activity/audit log viewer
+- [ ] Model routing page (deferred to Phase 3.2)
+- [ ] Permissions and skills management (deferred to Phase 3.2)
 
 ### Phase 4 -- Full Distro Packaging
 

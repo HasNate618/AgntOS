@@ -83,17 +83,19 @@ Eval: `bash .specs/features/agntos-foundation/eval-runbook.sh` (14 checks)
 
 ```
 crates/
-  agnt-common/   Shared types (audit, config, memory, models)
-  agntctl/       OS control CLI (10 tools)
-  agntd/         LLM agent daemon (prompt, tools, session store)
-modules/agntos/  NixOS modules (base, desktop-plasma, agent, vm)
-profiles/        dev-vm, plasma
-.specs/          Project memory (vision, roadmap, state, feature specs)
+  agnt-common/     Shared types (audit, config, memory, models, wire)
+  agntctl/         OS control CLI (10 tools)
+  agntd/           LLM agent daemon (prompt, tools, session store)
+  agntos-settings/ Kirigami GUI (QML, socket backend, data models)
+modules/agntos/    NixOS modules (base, desktop-plasma, agent, vm, agntos-settings)
+profiles/          dev-vm, plasma
+.specs/            Project memory (vision, roadmap, state, feature specs)
 ```
 
 ## State
 
 - Phase 1 complete (foundation + expansions A-F)
 - Phase 2 complete (model management CLI)
-- Phase 3+ planned (Kirigami UI, distro packaging, AI Anywhere, desktop automation)
-- 65 tests, 14/14 eval
+- Phase 3 v1 complete (Kirigami GUI: Chat, Status, Proposals, Activity)
+- Phase 3.2 planned (model routing page, memory viewer, cxx-qt bridge)
+- 120 tests (51 agntctl + 27 agntd + 12 agnt-common + 30 agntos-settings), 14/14 eval
