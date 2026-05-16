@@ -83,7 +83,8 @@ in {
     [org.kde.kdecoration2]
     BorderSize=Normal
     BorderlessMaximizedWindows=true
-    Theme=__aurorae__svg__kde-rich
+    library=org.kde.klassy
+    theme=klassy
     [Plugins]
     fadeEnabled=true
     fadedesktopEnabled=true
@@ -92,6 +93,20 @@ in {
     maximizeEnabled=true
     squashEnabled=true
     fadingpopupsEnabled=true
+  '';
+
+  environment.etc."xdg/klassy/klassyrc".text = ''
+    [Windeco]
+    WindowCornerRadius=8
+    RoundAllCornersWhenNoBorders=true
+    ThinWindowOutlineStyleActive=WindowOutlineAccentColor
+    ThinWindowOutlineStyleInactive=WindowOutlineAccentWithContrast
+    ThinWindowOutlineThickness=1.75
+    ShowOutlineNormallyActive=true
+    ShowOutlineNormallyInactive=true
+    ShowCloseOutlineNormallyActive=true
+    ShowCloseOutlineNormallyInactive=true
+    DrawBorderOnMaximizedWindows=true
   '';
 
   environment.etc."xdg/plasmarc".text = ''

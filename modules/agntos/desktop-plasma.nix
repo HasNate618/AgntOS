@@ -34,6 +34,7 @@ in {
       kora-icon-theme
       agntos-start-icon
       bart-kde
+      klassy
     ];
 
     # Qt plugin path for theme discovery

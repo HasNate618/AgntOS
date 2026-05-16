@@ -3,9 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs, ... }: let
+  outputs = { self, nixpkgs, nixpkgs-unstable, ... }: let
     agntosOverlay = final: prev: {
       agntctl = final.callPackage ./pkgs/agntctl { };
       agntd = final.callPackage ./pkgs/agntd { };
@@ -15,6 +16,7 @@
       agntos-wallpapers = final.callPackage ./pkgs/agntos-wallpapers { };
       bart-kde = final.callPackage ./pkgs/bart-kde { };
       winsur-kde = final.callPackage ./pkgs/winsur-kde { };
+      klassy = nixpkgs-unstable.legacyPackages.${final.stdenv.hostPlatform.system}.klassy;
     };
   in {
     # --- Dev VM ---
@@ -51,7 +53,7 @@
         overlays = [ agntosOverlay ];
       };
     in {
-      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon agntos-wallpapers bart-kde winsur-kde;
+      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon agntos-wallpapers bart-kde winsur-kde klassy;
     };
   };
 }

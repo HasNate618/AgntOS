@@ -80,12 +80,12 @@ activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
     fi
 
-    # Set Bart window decorations, blur, compositing (QPainter for VM compat), and animations
+    # Set Klassy window decorations with rounded corners, blur, compositing (QPainter for VM compat), and animations
     if [ ! -f /home/developer/.config/kwinrc ]; then
       cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
-library=org.kde.kwin.aurorae
-theme=Bart
+library=org.kde.klassy
+theme=klassy
 [Compositing]
 Enabled=true
 Backend=QPainter
@@ -101,6 +101,24 @@ maximizeEnabled=true
 squashEnabled=true
 fadingpopupsEnabled=true
 KWI
+    fi
+
+    # Klassy window decoration config with rounded corners
+    mkdir -p /home/developer/.config/klassy
+    if [ ! -f /home/developer/.config/klassy/klassyrc ]; then
+      cat > /home/developer/.config/klassy/klassyrc << 'KLA'
+[Windeco]
+WindowCornerRadius=8
+RoundAllCornersWhenNoBorders=true
+ThinWindowOutlineStyleActive=WindowOutlineAccentColor
+ThinWindowOutlineStyleInactive=WindowOutlineAccentWithContrast
+ThinWindowOutlineThickness=1.75
+ShowOutlineNormallyActive=true
+ShowOutlineNormallyInactive=true
+ShowCloseOutlineNormallyActive=true
+ShowCloseOutlineNormallyInactive=true
+DrawBorderOnMaximizedWindows=true
+KLA
     fi
     if [ ! -f /home/developer/.config/plasmarc ]; then
       cat > /home/developer/.config/plasmarc << 'PLA'
@@ -170,6 +188,7 @@ SH
     chown -R developer:users /home/developer/.config/kdeglobals \
       /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
       /home/developer/.config/plasmarc /home/developer/.config/konsolerc \
+      /home/developer/.config/klassy \
       /home/developer/.config/autostart \
       /home/developer/.local/share/konsole \
       /home/developer/.local/share \
