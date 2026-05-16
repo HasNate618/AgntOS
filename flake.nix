@@ -12,10 +12,14 @@
       agntd = final.callPackage ./pkgs/agntd { };
       agntos-branding = final.callPackage ./pkgs/agntos-branding { };
       agntos-fonts = final.callPackage ./pkgs/agntos-fonts { };
+      agntos-settings = final.callPackage ./pkgs/agntos-settings {
+        rustPlatform = nixpkgs-unstable.legacyPackages.${final.stdenv.hostPlatform.system}.rustPlatform;
+      };
       agntos-start-icon = final.callPackage ./pkgs/agntos-start-icon { };
       agntos-wallpapers = final.callPackage ./pkgs/agntos-wallpapers { };
       bart-kde = final.callPackage ./pkgs/bart-kde { };
       winsur-kde = final.callPackage ./pkgs/winsur-kde { };
+      kirigami = final.kdePackages.kirigami;
       klassy = nixpkgs-unstable.legacyPackages.${final.stdenv.hostPlatform.system}.klassy;
     };
   in {
@@ -53,7 +57,7 @@
         overlays = [ agntosOverlay ];
       };
     in {
-      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-start-icon agntos-wallpapers bart-kde winsur-kde klassy;
+      inherit (pkgs) agntctl agntd agntos-branding agntos-fonts agntos-settings agntos-start-icon agntos-wallpapers bart-kde winsur-kde klassy;
     };
   };
 }
