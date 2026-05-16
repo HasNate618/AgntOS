@@ -85,7 +85,13 @@ in {
     BorderlessMaximizedWindows=true
     library=org.kde.klassy
     theme=klassy
+    [Compositing]
+    Enabled=true
+    Backend=OpenGL
+    [Effect-Blur]
+    Enabled=true
     [Plugins]
+    blurEnabled=true
     fadeEnabled=true
     fadedesktopEnabled=true
     slidingpopupsEnabled=true
