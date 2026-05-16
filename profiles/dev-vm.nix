@@ -55,7 +55,16 @@
     fi
   '';
 
+  environment.variables = {
+    KWIN_COMPOSE = "O2";
+  };
+
   system.activationScripts.plasma-config = ''
+    # Force OpenGL 2 compositing for KWin (needed for blur in VM)
+    if ! grep -q "KWIN_COMPOSE" /etc/environment 2>/dev/null; then
+      echo "KWIN_COMPOSE=O2" >> /etc/environment
+    fi
+
     mkdir -p /home/developer/.config
     chown developer:users /home/developer/.config
 
