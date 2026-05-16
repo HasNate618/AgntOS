@@ -111,17 +111,24 @@ KWI
 WindowCornerRadius=8
 RoundAllCornersWhenNoBorders=true
 DrawBorderOnMaximizedWindows=true
+ColorizeWindowOutlineWithButton=false
 
 [WindowOutlineStyle]
-ThinWindowOutlineStyleActive=WindowOutlineCustomColor
-ThinWindowOutlineStyleInactive=WindowOutlineCustomWithContrast
-ThinWindowOutlineCustomColorActive=245,124,72
-ThinWindowOutlineCustomColorInactive=245,124,72
-ThinWindowOutlineThickness=1.75
+WindowOutlineStyleActive=WindowOutlineCustomColor
+WindowOutlineStyleInactive=WindowOutlineCustomWithContrast
+WindowOutlineCustomColorActive=245,124,72
+WindowOutlineCustomColorInactive=245,124,72
+WindowOutlineThickness=1.75
+WindowOutlineCustomColorOpacityActive=100
+WindowOutlineCustomColorOpacityInactive=60
+WindowOutlineCustomWithContrastOpacityActive=80
+WindowOutlineCustomWithContrastOpacityInactive=50
 
 [ButtonBehaviour]
 ShowOutlineNormallyActive=true
 ShowOutlineNormallyInactive=true
+ShowCloseOutlineNormallyActive=true
+ShowCloseOutlineNormallyInactive=true
 KLA
     fi
     if [ ! -f /home/developer/.config/plasmarc ]; then
