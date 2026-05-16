@@ -76,14 +76,18 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
 
-    # Set Bart window decorations, blur effect, compositing, and kinetic animations
+    # Set Bart window decorations, blur, compositing (QPainter for VM compat), and animations
     cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
 theme=Bart
+[Compositing]
+Enabled=true
+Backend=QPainter
 [Effect-Blur]
 Enabled=true
 [Plugins]
+blurEnabled=true
 fadeEnabled=true
 fadedesktopEnabled=true
 slidingpopupsEnabled=true
