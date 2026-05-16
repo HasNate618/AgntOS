@@ -66,7 +66,7 @@ in {
     [General]
     ColorScheme=BreezeDark
     widgetStyle=Breeze
-    TerminalApplication=ghostty
+    TerminalApplication=konsole
     [KDE]
     LookAndFeelPackage=org.kde.breezedark.desktop
     [Icons]
@@ -119,50 +119,6 @@ in {
     monospace = [ "GeistMono Nerd Font" ];
   };
 
-  # ── Ghostty terminal ──
-
-  environment.sessionVariables = {
-    GHOSTTY_CONFIG = "/etc/xdg/ghostty/config";
-  };
-
-  environment.etc."xdg/ghostty/config".text = ''
-    # AgntOS default terminal configuration
-    font-family = GeistMono Nerd Font
-    font-size = 11
-    font-feature = calt
-    font-feature = liga
-
-    # AgntOS color palette — warm dark theme
-    background = #141416
-    foreground = #E2E0D8
-    cursor-color = #F57C48
-    cursor-style = bar
-    cursor-style-blink = true
-    selection-background = #F57C48
-    selection-foreground = #141416
-
-    palette = 0=#1E1E22
-    palette = 1=#E06B6B
-    palette = 2=#7BC97A
-    palette = 3=#E5B567
-    palette = 4=#6CB6EB
-    palette = 5=#C77DBB
-    palette = 6=#5EBFC5
-    palette = 7=#D4D2CC
-    palette = 8=#3E3E44
-    palette = 9=#FF7A7A
-    palette = 10=#8ED98D
-    palette = 11=#F0C870
-    palette = 12=#7EC4F0
-    palette = 13=#D48AC8
-    palette = 14=#6ECCD2
-    palette = 15=#F2F0EA
-
-    background-opacity = 0.95
-    window-padding-x = 8
-    window-padding-y = 8
-  '';
-
   # ── Boot splash (Plymouth) ──
 
   boot.plymouth = {
@@ -192,7 +148,6 @@ in {
     agntos-branding
     agntos-wallpapers
     fastfetch
-    ghostty
   ];
 
 }

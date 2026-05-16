@@ -55,17 +55,16 @@
     fi
   '';
 
-  system.activationScripts.ghostty-config = ''
-    mkdir -p /home/developer/.config/ghostty /home/developer/.config
+  system.activationScripts.plasma-config = ''
+    mkdir -p /home/developer/.config
     chown developer:users /home/developer/.config
-    ln -sf /etc/xdg/ghostty/config /home/developer/.config/ghostty/config
 
-    # Write complete kdeglobals with WinSur dark + Kora icons + AgntOS fonts
+    # Write complete kdeglobals with Bart colors + Kora icons + AgntOS fonts
     cat > /home/developer/.config/kdeglobals << 'KDE'
 [General]
 ColorScheme=Bart
 widgetStyle=Breeze
-TerminalApplication=ghostty
+TerminalApplication=konsole
 [Icons]
 Theme=agntos-start
 [Fonts]
@@ -101,6 +100,26 @@ KWI
 name=Bart
 PLA
 
+    # Create Konsole profile with transparency and blur
+    mkdir -p /home/developer/.local/share/konsole
+    cat > /home/developer/.local/share/konsole/AgntOS.profile << 'KON'
+[General]
+Name=AgntOS
+Parent=FALLBACK/
+Description=AgntOS terminal with transparency
+
+[Appearance]
+ColorScheme=Bart
+Font=GeistMono Nerd Font,10,-1,5,50,0,0,0,0,0
+
+[Background]
+Mode=Blur
+KON
+    cat > /home/developer/.config/konsolerc << 'KRC'
+[Desktop Entry]
+DefaultProfile=AgntOS.profile
+KRC
+
     # No Kvantum — uses Breeze widget style with Bart color scheme
     # KWin decorations and blur applied via autostart
     mkdir -p /home/developer/.config/autostart
@@ -133,10 +152,11 @@ SH
     rm -f /home/developer/.cache/plasma_theme_Bart.kcache
     rm -f /home/developer/.cache/icon-cache.kcache
 
-    chown -R developer:users /home/developer/.config/ghostty /home/developer/.config/kdeglobals \
+    chown -R developer:users /home/developer/.config/kdeglobals \
       /home/developer/.config/ksplashrc /home/developer/.config/kwinrc \
-      /home/developer/.config/plasmarc \
+      /home/developer/.config/plasmarc /home/developer/.config/konsolerc \
       /home/developer/.config/autostart \
+      /home/developer/.local/share/konsole \
       /home/developer/.local/share \
       /home/developer/.cache
   '';
