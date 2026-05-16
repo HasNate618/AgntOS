@@ -22,7 +22,9 @@ pub struct ProposalModel {
 
 impl ProposalModel {
     pub fn new() -> Self {
-        Self { proposals: Vec::new() }
+        Self {
+            proposals: Vec::new(),
+        }
     }
 
     pub fn refresh(&mut self, config_dir: &str) {
@@ -34,10 +36,26 @@ impl ProposalModel {
                 if path.extension().map_or(false, |e| e == "json") {
                     if let Ok(raw) = std::fs::read_to_string(&path) {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                            let proposal_id = v.get("id").and_then(|i| i.as_str()).unwrap_or("?").to_string();
-                            let summary = v.get("summary").and_then(|s| s.as_str()).unwrap_or("").to_string();
-                            let nix = v.get("nix_changes").and_then(|s| s.as_str()).unwrap_or("").to_string();
-                            let rollback = v.get("rollback_guidance").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                            let proposal_id = v
+                                .get("id")
+                                .and_then(|i| i.as_str())
+                                .unwrap_or("?")
+                                .to_string();
+                            let summary = v
+                                .get("summary")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let nix = v
+                                .get("nix_changes")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let rollback = v
+                                .get("rollback_guidance")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
                             new_proposals.push(Proposal {
                                 proposal_id,
                                 summary,

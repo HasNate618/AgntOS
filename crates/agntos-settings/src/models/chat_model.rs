@@ -28,7 +28,9 @@ pub struct ChatModel {
 
 impl ChatModel {
     pub fn new() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 
     pub fn add_user_message(&mut self, content: &str) {
@@ -79,7 +81,12 @@ impl ChatModel {
     }
 
     pub fn resolve_tool_call(&mut self, id: &str, output: &str, success: bool) {
-        if let Some(entry) = self.entries.iter_mut().rev().find(|e| e.tool_id.as_deref() == Some(id)) {
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .rev()
+            .find(|e| e.tool_id.as_deref() == Some(id))
+        {
             entry.entry_type = ChatEntryType::ToolResult;
             entry.content = output.to_string();
             entry.tool_success = Some(success);
@@ -119,7 +126,10 @@ mod tests {
         let mut m = ChatModel::new();
         m.add_user_message("hello");
         assert_eq!(m.entries.len(), 1);
-        assert!(matches!(m.entries[0].entry_type, ChatEntryType::UserMessage));
+        assert!(matches!(
+            m.entries[0].entry_type,
+            ChatEntryType::UserMessage
+        ));
         assert_eq!(m.entries[0].content, "hello");
     }
 
@@ -148,9 +158,15 @@ mod tests {
     fn chat_model_approval_request() {
         let mut m = ChatModel::new();
         m.add_approval_request("p-abc", "Install nginx", "tc-2");
-        assert!(matches!(m.entries[0].entry_type, ChatEntryType::ApprovalRequest));
+        assert!(matches!(
+            m.entries[0].entry_type,
+            ChatEntryType::ApprovalRequest
+        ));
         assert_eq!(m.entries[0].proposal_id.as_deref(), Some("p-abc"));
-        assert_eq!(m.entries[0].proposal_summary.as_deref(), Some("Install nginx"));
+        assert_eq!(
+            m.entries[0].proposal_summary.as_deref(),
+            Some("Install nginx")
+        );
     }
 
     #[test]

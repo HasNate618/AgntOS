@@ -4,9 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use agnt_common::wire::{
-    ClientMessage, ServerMessage, AuditRequestAction, ToolCallStatus,
-};
+use agnt_common::wire::{AuditRequestAction, ClientMessage, ServerMessage, ToolCallStatus};
 use agntos_settings::backend::session::Connection;
 
 fn start_mock_server(path: &str, done: Arc<Mutex<bool>>) -> thread::JoinHandle<()> {
@@ -74,17 +72,15 @@ fn handle_connection(stream: UnixStream, _done: Arc<Mutex<bool>>) {
         }
         ClientMessage::Audit { .. } => {
             let resp = ServerMessage::AuditResponse {
-                entries: vec![
-                    serde_json::json!({
-                        "id": "a-001",
-                        "timestamp": "2025-05-16T14:30:00Z",
-                        "action": {"type": "Apply", "proposal_id": "p-abc"},
-                        "summary": "Applied: Install nginx",
-                        "result": {"status": "Success", "message": "Rebuild ok"},
-                        "actor": "agent",
-                        "prompt": "install nginx",
-                    }),
-                ],
+                entries: vec![serde_json::json!({
+                    "id": "a-001",
+                    "timestamp": "2025-05-16T14:30:00Z",
+                    "action": {"type": "Apply", "proposal_id": "p-abc"},
+                    "summary": "Applied: Install nginx",
+                    "result": {"status": "Success", "message": "Rebuild ok"},
+                    "actor": "agent",
+                    "prompt": "install nginx",
+                })],
             };
             writeln!(writer, "{}", serde_json::to_string(&resp).unwrap()).ok();
         }
@@ -127,7 +123,11 @@ fn protocol_handshake() {
     let mut conn = Connection::connect(&path_str).unwrap();
     let resp = conn.handshake(None).unwrap();
     match resp {
-        ServerMessage::SessionReady { profile, model, pending_proposals } => {
+        ServerMessage::SessionReady {
+            profile,
+            model,
+            pending_proposals,
+        } => {
             assert_eq!(profile, "test-profile");
             assert_eq!(model, "test-model");
             assert_eq!(pending_proposals, vec!["p-test"]);
@@ -152,7 +152,10 @@ fn protocol_status_request() {
     let mut conn = Connection::connect(&path_str).unwrap();
     conn.handshake(None).unwrap();
 
-    conn.send(&ClientMessage::Status { target: "system".to_string() }).unwrap();
+    conn.send(&ClientMessage::Status {
+        target: "system".to_string(),
+    })
+    .unwrap();
     let resp = conn.recv().unwrap();
     match resp {
         ServerMessage::StatusResponse { target, data } => {
@@ -184,15 +187,13 @@ fn protocol_audit_request() {
         query: None,
         id: None,
         limit: 10,
-    }).unwrap();
+    })
+    .unwrap();
     let resp = conn.recv().unwrap();
     match resp {
         ServerMessage::AuditResponse { entries } => {
             assert_eq!(entries.len(), 1);
-            assert_eq!(
-                entries[0].get("id").and_then(|v| v.as_str()),
-                Some("a-001")
-            );
+            assert_eq!(entries[0].get("id").and_then(|v| v.as_str()), Some("a-001"));
         }
         other => panic!("expected AuditResponse, got: {:?}", other),
     }
@@ -214,7 +215,10 @@ fn protocol_chat_turn() {
     let mut conn = Connection::connect(&path_str).unwrap();
     conn.handshake(None).unwrap();
 
-    conn.send(&ClientMessage::Chat { prompt: "inspect system".to_string() }).unwrap();
+    conn.send(&ClientMessage::Chat {
+        prompt: "inspect system".to_string(),
+    })
+    .unwrap();
 
     let msg1 = conn.recv().unwrap();
     match msg1 {

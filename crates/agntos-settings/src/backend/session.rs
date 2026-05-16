@@ -1,8 +1,8 @@
+use crate::backend::protocol::deserialize;
+use agnt_common::wire::{ClientMessage, ServerMessage};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
-use agnt_common::wire::{ClientMessage, ServerMessage};
-use crate::backend::protocol::deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
@@ -57,9 +57,8 @@ impl Connection {
             match UnixStream::connect(&self.socket_path) {
                 Ok(stream) => {
                     self.stream = stream;
-                    self.reader = BufReader::new(
-                        self.stream.try_clone().map_err(|e| e.to_string())?
-                    );
+                    self.reader =
+                        BufReader::new(self.stream.try_clone().map_err(|e| e.to_string())?);
                     self.backoff_secs = 1;
                     return Ok(());
                 }
@@ -127,9 +126,7 @@ mod tests {
         let path = "/tmp/agntos-settings-test-backoff.sock";
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).unwrap();
-        let _ = thread::spawn(move || {
-            listener.accept().ok()
-        });
+        let _ = thread::spawn(move || listener.accept().ok());
 
         let conn = Connection::connect(path).unwrap();
         assert_eq!(conn.backoff_secs, 1);

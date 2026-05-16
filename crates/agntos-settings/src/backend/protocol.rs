@@ -15,7 +15,9 @@ mod tests {
 
     #[test]
     fn serialize_chat() {
-        let msg = ClientMessage::Chat { prompt: "hello".to_string() };
+        let msg = ClientMessage::Chat {
+            prompt: "hello".to_string(),
+        };
         let json = serialize(&msg);
         assert!(json.contains("\"type\":\"chat\""));
     }

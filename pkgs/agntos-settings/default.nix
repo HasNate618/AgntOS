@@ -1,4 +1,4 @@
-{ lib, rustPlatform, pkg-config, openssl, qt6, kdePackages, makeWrapper }:
+{ lib, rustPlatform, pkg-config, openssl, qt6, makeWrapper }:
 
 rustPlatform.buildRustPackage {
   pname = "agntos-settings";
@@ -23,8 +23,6 @@ rustPlatform.buildRustPackage {
   cargoLock = {
     lockFile = ../../Cargo.lock;
   };
-
-  dontWrapQtApps = true;
 
   postInstall = ''
     mkdir -p $out/share/agntos-settings/qml
