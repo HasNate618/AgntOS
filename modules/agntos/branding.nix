@@ -84,6 +84,14 @@ in {
     BorderSize=Normal
     BorderlessMaximizedWindows=true
     Theme=__aurorae__svg__kde-rich
+    [Plugins]
+    fadeEnabled=true
+    fadedesktopEnabled=true
+    slidingpopupsEnabled=true
+    scaleEnabled=true
+    maximizeEnabled=true
+    squashEnabled=true
+    fadingpopupsEnabled=true
   '';
 
   environment.etc."xdg/plasmarc".text = ''

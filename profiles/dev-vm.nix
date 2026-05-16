@@ -76,13 +76,21 @@ small=Plus Jakarta Sans,8,-1,5,50,0,0,0,0,0
 activeFont=Plus Jakarta Sans,10,-1,5,50,0,0,0,0,0,Medium
 KDE
 
-    # Set Bart window decorations, blur effect, and compositing
+    # Set Bart window decorations, blur effect, compositing, and kinetic animations
     cat > /home/developer/.config/kwinrc << 'KWI'
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
 theme=Bart
 [Effect-Blur]
 Enabled=true
+[Plugins]
+fadeEnabled=true
+fadedesktopEnabled=true
+slidingpopupsEnabled=true
+scaleEnabled=true
+maximizeEnabled=true
+squashEnabled=true
+fadingpopupsEnabled=true
 KWI
     cat > /home/developer/.config/plasmarc << 'PLA'
 [Theme]
@@ -107,6 +115,10 @@ sleep 2
 plasma-apply-desktoptheme Bart 2>/dev/null
 plasma-apply-colorscheme Bart 2>/dev/null
 qdbus org.kde.KWin /Effects loadEffect "blur" 2>/dev/null
+# Load built-in animation effects
+for e in fade fadedesktop slidingpopups scale maximize squash fadingpopups; do
+  qdbus org.kde.KWin /Effects loadEffect "$e" 2>/dev/null
+done
 SH
     chmod +x /home/developer/.config/autostart/agntos-config.sh
 
