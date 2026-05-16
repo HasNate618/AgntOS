@@ -24,11 +24,15 @@ rustPlatform.buildRustPackage {
     lockFile = ../../Cargo.lock;
   };
 
+  dontWrapQtApps = true;
+
   postInstall = ''
-    mkdir -p $out/share/agntos-settings/qml
-    cp -r crates/agntos-settings/resources/* $out/share/agntos-settings/qml/
+    qmlDir=$out/share/agntos-settings/qml
+    mkdir -p $qmlDir
+    cp -r crates/agntos-settings/resources/* $qmlDir/
 
     wrapProgram $out/bin/agntos-settings \
+      --set AGNTOS_QML_DIR "$qmlDir" \
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ qt6.qtbase qt6.qtdeclarative ]}"
 
     mkdir -p $out/share/applications
@@ -37,12 +41,16 @@ rustPlatform.buildRustPackage {
 Name=AgntOS Control Center
 Comment=Configure and interact with the AgntOS agent
 Exec=agntos-settings
-Icon=system-run
+Icon=agntos-start
 Terminal=false
 Type=Application
-Categories=System;Settings;
-Keywords=agent;ai;nixos;settings;
+Categories=Qt;System;
+StartupNotify=true
 DESKTOP
+
+    # Also install the QML files to standard Qt QML path for auto-discovery
+    mkdir -p $out/lib/qt-6/qml/AgntOS
+    ln -sf $qmlDir/* $out/lib/qt-6/qml/AgntOS/
   '';
 
   meta = {

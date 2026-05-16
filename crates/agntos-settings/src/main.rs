@@ -10,6 +10,10 @@ fn main() {
     let socket_path =
         std::env::var("AGNTOS_SOCKET").unwrap_or_else(|_| "/run/agntd/agent.sock".to_string());
 
+    let qml_dir = std::env::var("AGNTOS_QML_DIR")
+        .unwrap_or_else(|_| "/run/current-system/sw/share/agntos-settings/qml".to_string());
+    let qml_path = format!("{}/main.qml", qml_dir);
+
     let mut engine = QmlEngine::new();
 
     let bridge = AppBridge::new(&socket_path);
@@ -22,6 +26,6 @@ fn main() {
     }
     engine.set_object_property(QString::from("appBridge"), pinned);
 
-    engine.load_file(QString::from("main.qml"));
+    engine.load_file(QString::from(qml_path.as_str()));
     engine.exec();
 }
