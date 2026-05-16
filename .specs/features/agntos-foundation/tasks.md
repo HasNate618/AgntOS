@@ -691,7 +691,7 @@ Done when:
 
 ### T402: Memory system prompt optimization
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: Efficient memory usage.
 
@@ -711,7 +711,7 @@ Done when:
 
 ### T403: End-of-session memory consolidation
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: Automatic memory extraction without Hermes-style background pipeline.
 
@@ -722,20 +722,21 @@ remembering. Runs `consolidate` automatically afterward.
 
 Where:
 - `crates/agntd/src/agent.rs`
-- `crates/agnt-common/src/memory.rs`
+- `crates/agntd/src/main.rs`
 
 Done when:
-- Socket close triggers memory review step.
+- REPL exit triggers memory review step (LLM-hidden extraction + agntctl memory add).
 - Agent iterates recent session turns and extracts new facts via `memory add`.
 - Auto-consolidation runs after additions.
 - No separate background extraction pipeline needed.
-- User can disable auto-consolidation via config.
+- Socket mode is inherently stateless (one-shot per connection), so auto-review
+  applies to REPL mode only. Each connection is its own session.
 
 ## Phase 1 Expansion — Proactive Self-Healing
 
 ### T501: System health watchdog loop
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: Proactive monitoring.
 
@@ -755,7 +756,7 @@ Done when:
 
 ### T502: Log triage and fix drafting
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T501.
 
@@ -775,21 +776,20 @@ Done when:
 
 ### T503: Notification and proposal queue
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: T502.
 
 What:
 Drafted fixes from watchdog evaluations are saved as pending `ConfigProposal`s.
-User receives a desktop notification (or socket response) to review.
+User receives notification via watchdog.log and stderr.
 
 Where:
 - `crates/agntd/src/watchdog.rs`
-- `crates/agntd/src/agent.rs`
 
 Done when:
 - Drafted proposals are saved to `/etc/agntos/proposals/`.
-- User is notified: "Service X failed. Fix drafted. Run `agntctl propose list`."
+- User is notified via eprintln and watchdog.log.
 - Proposals follow the same propose/apply/audit/undo workflow.
 - User can ignore or apply.
 
@@ -797,7 +797,7 @@ Done when:
 
 ### T601: Model registry end-to-end
 
-Status: `[ ]`
+Status: `[x]`
 
 Requirements: User-configurable model endpoints.
 
@@ -806,14 +806,61 @@ Build the full model management experience: add/remove model profiles, API key
 configuration (secure storage), task-class routing UI, and local backend adapter.
 
 Where:
-- `crates/agnt-common/src/models.rs`
 - `crates/agntctl/src/model.rs`
-- `crates/agntd/src/llm.rs`
+- `crates/agntctl/src/main.rs`
 
 Done when:
 - `agntctl model add` creates a new profile in `models.toml`.
 - `agntctl model remove` deletes a profile.
-- API keys stored via secure mechanism (not just env vars).
+- `agntctl model set-route` assigns a task to a profile.
+- `agntctl model suggest` reads hardware and recommends a model.
 - Task-class routing respects per-task model assignments.
-- Local backend (Ollama or llama.cpp) works for simple tasks (chat, log analysis).
-- Hardware-aware suggestions work: `agntctl model suggest` picks appropriate model.
+- API keys remain env-var based (api_key_env field).
+- Hardware-aware suggestions from inspect.
+
+## Phase 1 Expansion — Home Manager Integration
+
+### T801: Home Manager proposal template
+
+Status: `[x]`
+
+What:
+Add `set-home-option` keyword to `propose.rs` that generates Nix config for
+Home Manager user dotfiles.
+
+Where:
+- `crates/agntctl/src/propose.rs`
+
+Done when:
+- `propose set-home-option <option> <value>` generates files under `home/`.
+- The generated Nix wraps options in `home-manager.users.<user>.*`.
+- User comes from `AGNTOS_USER` env var (defaults to `"primary"`).
+- Tests exist for string and bool values.
+
+### T802: LLM propose tool description update
+
+Status: `[x]`
+
+What:
+Update the `propose` tool description to mention `set-home-option`.
+
+Where:
+- `crates/agntd/src/llm.rs`
+
+Done when:
+- Propose tool description says "use 'set-home-option <option> <value>' for Home Manager user dotfiles."
+
+### T803: Nix module wiring for home dir
+
+Status: `[x]`
+
+What:
+Add `/etc/agntos/home/` directory imports to the base Nix module.
+
+Where:
+- `modules/agntos/base.nix`
+
+Done when:
+- `homeDir` and `homeImports` variables exist alongside packages/options/services.
+- `homeImports` is included in the imports list.
+- The tmpfiles config creates the `/etc/agntos/home/` directory.

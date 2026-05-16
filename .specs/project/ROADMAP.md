@@ -120,9 +120,9 @@ Decisions:
 - **Single memory system, not two.** Drop Hermes-style background extraction. The agent curates its own memory via the `memory` tool — no separate inference pipeline.
 - **Don't store inspectable facts.** Memory is for preferences, intent, and context that can't be derived from system state (which is re-inspectable at any time).
 - **Provenance over inference.** Add `prompt` and `rationale` to `AuditEntry` to capture the "why" at the source, rather than inferring it later.
-- **End-of-session auto-consolidation.** On socket close or idle, the agent reviews the session and updates memory. This replaces the Hermes-style extraction approach with simpler agent-driven consolidation.
+- **End-of-session auto-consolidation.** On REPL exit, the agent reviews recent session turns and updates memory via LLM extraction + consolidation.
 
-Status: Planned.
+Status: Complete.
 
 ### Expansion E: Proactive Self-Healing (Watchdogs)
 
@@ -135,7 +135,7 @@ Approach:
 - User receives notification: "I've drafted a fix. Review?"
 - No raw journalctl firehose — LLM evaluates only targeted, relevant logs
 
-Status: Planned.
+Status: Complete.
 
 ### Expansion F: Home Manager Integration
 
@@ -144,10 +144,10 @@ Goal: manage user dotfiles with the same safety and rollback guarantees as syste
 Approach:
 - Add `propose set-home-option <option> <value>` template
 - Files go to `/etc/agntos/home/`
-- `home.nix` imports the directory via `dirImports`
+- `base.nix` imports the directory via `dirImports`
 - Same propose/apply/audit/undo workflow
 
-Status: Planned.
+Status: Complete.
 
 ## Phase 2: Model Management And Routing
 
@@ -156,14 +156,16 @@ Goal: make model configuration a core OS feature.
 Deliverables:
 - Model registry and routing config.
 - Cloud endpoint/API key configuration.
-- Local model backend integration (first backend TBD).
+- Local model backend integration (already OpenAI-compatible via Ollama/llama.cpp).
 - Task-class routing: chat, OS planning, config editing, log analysis, coding, future vision.
 - Hardware-aware model recommendations.
-- Settings UI surface.
+- Settings UI surface (deferred to Phase 3).
 
 Exit criteria:
 - User can configure at least one cloud model and one local model path.
 - User can assign models by task class.
+
+Status: Complete (CLI). UI deferred to Phase 3.
 
 ## Phase 3: Kirigami Settings Experience
 
@@ -258,18 +260,17 @@ Exit criteria:
 
 ### Phase 1 Expansions (In Progress)
 
-- [ ] Memory optimization: teach agent to avoid storing inspectable facts
-- [ ] End-of-session auto-consolidation
-- [ ] Proactive self-healing: targeted polling checks (systemctl --failed, disk, OOM)
-- [ ] Home Manager integration: user dotfiles with same propose/apply/audit/undo workflow
+- [x] Memory optimization: teach agent to avoid storing inspectable facts
+- [x] End-of-session auto-consolidation
+- [x] Proactive self-healing: targeted polling checks (systemctl --failed, disk, OOM)
+- [x] Home Manager integration: user dotfiles with same propose/apply/audit/undo workflow
 
 ### Phase 2 -- Model Management & Routing
 
-- [ ] Model registry (agntctl model add/remove)
-- [ ] Secure API key storage
-- [ ] Local model backend integration (Ollama, llama.cpp)
-- [ ] Hardware-aware recommendations
-- [ ] Task-class routing UI
+- [x] Model registry (agntctl model add/remove)
+- [x] Task-class routing (agntctl model set-route)
+- [x] Hardware-aware recommendations (agntctl model suggest)
+- [ ] Secure API key storage (deferred — env vars suffice)
 
 ### Phase 3 -- Kirigami Settings Experience
 

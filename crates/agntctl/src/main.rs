@@ -114,13 +114,41 @@ enum Command {
     },
     /// View or resolve model routing configuration
     Model {
-        /// Action: list or route <task>
+        /// Action: list, route, add, remove, set-route, or suggest
         #[arg(default_value = "list")]
         action: String,
 
-        /// Task class (for "route")
+        /// Profile name
         #[arg(required = false)]
+        profile: Option<String>,
+
+        /// Endpoint URL (for add)
+        #[arg(long)]
+        endpoint: Option<String>,
+
+        /// Model name (for add)
+        #[arg(long)]
+        model: Option<String>,
+
+        /// API key env var name (for add)
+        #[arg(long)]
+        api_key_env: Option<String>,
+
+        /// Max tokens (for add)
+        #[arg(long)]
+        max_tokens: Option<u32>,
+
+        /// Temperature (for add)
+        #[arg(long)]
+        temperature: Option<f32>,
+
+        /// Task class (for route, set-route)
+        #[arg(long)]
         task: Option<String>,
+
+        /// Target profile (for set-route)
+        #[arg(long)]
+        route_profile: Option<String>,
 
         /// Output as JSON
         #[arg(long)]
@@ -423,23 +451,51 @@ fn main() {
         },
         Command::Model {
             action,
+            profile,
+            endpoint,
+            model,
+            api_key_env,
+            max_tokens,
+            temperature,
             task,
+            route_profile,
             json,
             config_dir,
         } => {
             let result = match action.as_str() {
                 "list" => model::execute_list(json, config_dir.as_ref()),
                 "route" => {
-                    let task = task
-                        .as_deref()
-                        .ok_or_else(|| "Usage: agntctl model route <task>".to_string());
-                    match task {
-                        Ok(t) => model::execute_route(t, json, config_dir.as_ref()),
-                        Err(e) => Err(e),
+                    match task.as_deref() {
+                        Some(t) => model::execute_route(t, json, config_dir.as_ref()),
+                        None => Err("Usage: agntctl model route <task>".to_string()),
                     }
                 }
+                "add" => {
+                    let name = profile.as_deref();
+                    let ep = endpoint.as_deref();
+                    let mdl = model.as_deref();
+                    match (name, ep, mdl) {
+                        (Some(n), Some(e), Some(m)) => model::execute_add(n, e, m, api_key_env.as_deref(), max_tokens, temperature, config_dir.as_ref()),
+                        _ => Err("Usage: agntctl model add <name> --endpoint <url> --model <name>".to_string()),
+                    }
+                }
+                "remove" => {
+                    match profile.as_deref() {
+                        Some(n) => model::execute_remove(n, config_dir.as_ref()),
+                        None => Err("Usage: agntctl model remove <name>".to_string()),
+                    }
+                }
+                "set-route" => {
+                    let t = task.as_deref();
+                    let p = route_profile.as_deref();
+                    match (t, p) {
+                        (Some(t), Some(p)) => model::execute_set_route(t, p, config_dir.as_ref()),
+                        _ => Err("Usage: agntctl model set-route --task <task> --route-profile <profile>".to_string()),
+                    }
+                }
+                "suggest" => model::execute_suggest(config_dir.as_ref()),
                 other => Err(format!(
-                    "Unknown model action: {}. Use 'list' or 'route <task>'",
+                    "Unknown model action: {}. Use 'list', 'route <task>', 'add', 'remove', 'set-route', or 'suggest'",
                     other
                 )),
             };

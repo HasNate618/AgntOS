@@ -54,6 +54,32 @@ Phase 1 complete (foundation + agent loop + general tools + daemon mode + surgic
 - 55 tests, zero warnings.
 - Eval: 14/14 checks passing.
 
+### Memory & Provenance
+- `prompt` and `rationale` fields added to AuditEntry with `#[serde(default)]`.
+- Audit search returns prompt content for provenance.
+- System prompt updated: "do NOT store inspectable facts in memory".
+- End-of-session auto-consolidation: on REPL exit, LLM reviews session turns and extracts facts.
+
+### Proactive Self-Healing (Watchdogs)
+- Background watchdog thread with tokio runtime, independent of REPL/socket.
+- Three checks: `systemctl --failed`, `df -h / > 95%`, `dmesg | grep -i oom`.
+- Triaged via LLM: CONFIG_ERROR → `agntctl propose`; TRANSIENT → logged.
+- Notifications via eprintln and watchdog.log.
+
+### Home Manager Integration
+- `propose set-home-option <option> <value>` keyword added to propose.rs.
+- Files go to `/etc/agntos/home/`, imported by base.nix.
+- User configurable via `AGNTOS_USER` env var (defaults to "primary").
+
+## Completed (Phase 2 — Model Management CLI)
+
+- `agntctl model add` / `remove` / `set-route` / `suggest` commands.
+- Profile CRUD with TOML serialization (blocks removing "default").
+- Task-class routing assignment.
+- Hardware-aware model recommendations via inspect.
+- API keys remain env-var based (`api_key_env` field).
+- 65 tests, zero warnings.
+
 ## Decisions
 
 ### Architecture Philosophy
@@ -145,13 +171,11 @@ Current: terminal REPL. Future:
 
 ## Still Open
 
-- Local model backend: Ollama, llama.cpp, vLLM, or adapter pattern.
+- Secure API key storage (file-based key files, keyring integration).
+- Local model backend adapter tuning per hardware config.
 - Skills format: markdown spec directories, typed Rust plugins, or hybrid.
 - Plasma integration surface: system tray, KRunner, Kirigami window, notifications.
 - ISO timing and distro packaging.
-- Proactive self-healing (watchdogs) implementation details: polling interval, notification mechanism.
-- Home Manager integration: whether to add as framework expansion or keep user dotfiles outside scope.
-- End-of-session consolidation: trigger mechanism (socket close, timer, explicit user gesture).
 
 ## Risks
 

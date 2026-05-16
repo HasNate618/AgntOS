@@ -99,8 +99,7 @@ impl LlmClient {
         })
     }
 
-    /// Non-streaming completion (kept as fallback).
-    #[allow(dead_code)]
+    /// Non-streaming completion (used by background tasks such as the watchdog).
     pub async fn complete(
         &self,
         messages: &[Value],
@@ -260,7 +259,7 @@ pub fn tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "propose",
-                "description": "Create a proposed Nix config change without applying it.",
+                "description": "Create a proposed Nix config change without applying it. Use 'set-home-option <option> <value>' for Home Manager user dotfiles.",
                 "parameters": {
                     "type": "object",
                     "required": ["description"],
@@ -416,7 +415,9 @@ Rules:\n\
 - Prefer edit_file over run_bash for modifying files.\n\
 - Use run_bash for ls, grep, find, systemctl, journalctl, dmesg,\n\
   and any command without a dedicated tool.\n\
-- When you learn stable system facts, store them in memory.\n\
+- Store preferences, intent, workflow patterns, and non-derivable user context
+  in memory. Do NOT store facts you can re-derive via inspect (CPU, RAM,
+  packages, disk — those are re-inspectable at any time).\n\
 - When asked why a change was made (e.g. \"why is X installed?\"),\n\
   use audit search to retrieve the recorded prompt. Every apply stores\n\
   the user\'s original request in the audit log.\n\

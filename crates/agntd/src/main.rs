@@ -34,6 +34,7 @@ mod agent;
 mod llm;
 mod session;
 mod util;
+mod watchdog;
 
 use agent::LlmSession;
 use serde_json::json;
@@ -61,6 +62,8 @@ fn main() {
 
 /// Runs the REPL — interactive mode (original behaviour).
 fn run_repl() {
+    watchdog::start(util::config_dir_str());
+
     print_banner();
 
     let mut llm_state = init_llm_session();
@@ -86,6 +89,14 @@ fn run_repl() {
 
         match lower.as_str() {
             "quit" | "exit" | "bye" => {
+                if let Some((runtime, state)) = &llm_state {
+                    println!("\nReviewing session for memory-worthy facts...");
+                    match agent::end_of_session_review(runtime, &state.client, &state.session_store)
+                    {
+                        Ok(msg) => println!("  {}", msg),
+                        Err(e) => println!("  Memory review skipped: {}", e),
+                    }
+                }
                 println!("bye.");
                 break;
             }
@@ -142,6 +153,8 @@ fn run_socket_mode(socket_path: &str) {
             std::process::exit(1);
         }
     };
+
+    watchdog::start(util::config_dir_str());
 
     println!(
         "agntd: listening on {} (profile={}, model={})",

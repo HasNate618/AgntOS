@@ -23,6 +23,8 @@ let
   packagesImports = dirImports packagesDir;
   optionsImports = dirImports optionsDir;
   serviceImports = dirImports servicesDir;
+  homeDir = "${cfgDir}/home";
+  homeImports = dirImports homeDir;
 in
 
 {
@@ -30,7 +32,8 @@ in
     packagesImports
     ++ optionalImport "${cfgDir}/custom.nix"
     ++ optionsImports
-    ++ serviceImports;
+    ++ serviceImports
+    ++ homeImports;
 
   options.agntos = {
     enable = lib.mkEnableOption "AgntOS AI-native system extensions";
@@ -73,6 +76,7 @@ in
         "d ${config.agntos.configDir}/options 0755 root root -"
         "d ${config.agntos.configDir}/proposals 0755 root root -"
         "d ${config.agntos.configDir}/services 0755 root root -"
+        "d ${config.agntos.configDir}/home 0755 root root -"
         "d ${config.agntos.configDir}/memory 0755 root root -"
         "f ${config.agntos.configDir}/memory/MEMORY.md 0644 root root -"
         "f ${config.agntos.configDir}/memory/USER.md 0644 root root -"

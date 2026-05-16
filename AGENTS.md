@@ -93,7 +93,7 @@ profiles/        dev-vm, plasma
 
 ## State
 
-- Phase 1 complete (foundation + expansions A-C)
-- Phase 1 expansions D-F in progress (memory optimization, watchdogs, home-manager)
-- Phase 2 planned (model management)
-- 55 tests, 14/14 eval
+- Phase 1 complete (foundation + expansions A-F)
+- Phase 2 complete (model management CLI)
+- Phase 3+ planned (Kirigami UI, distro packaging, AI Anywhere, desktop automation)
+- 65 tests, 14/14 eval

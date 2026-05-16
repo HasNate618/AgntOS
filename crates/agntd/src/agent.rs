@@ -530,6 +530,137 @@ fn command_result(cmd: Result<(String, String, bool), String>) -> Result<String,
     }
 }
 
+/// Reviews recent session turns and extracts memory-worthy facts via the LLM.
+/// Called at end-of-session (REPL exit) to capture preferences and intent.
+/// Falls back to silent consolidation if LLM is unavailable or errors.
+pub fn end_of_session_review(
+    runtime: &tokio::runtime::Runtime,
+    client: &LlmClient,
+    session_store: &SessionStore,
+) -> Result<String, String> {
+    let turns = session_store.recent_turns(30)?;
+    if turns.is_empty() {
+        return Ok("No session turns to review.".to_string());
+    }
+
+    let mut conversation = String::new();
+    for turn in &turns {
+        if turn.role == "tool" {
+            continue;
+        }
+        let role = match turn.role.as_str() {
+            "user" => "User",
+            "assistant" => "Agent",
+            _ => continue,
+        };
+        let snippet: String = turn.content.chars().take(250).collect();
+        conversation.push_str(&format!("{}: {}\n", role, snippet));
+    }
+
+    if conversation.trim().is_empty() {
+        return Ok("No user/assistant turns to review.".to_string());
+    }
+
+    let prompt = format!(
+        "You are a memory curator for an OS agent. Review this conversation and extract \
+facts worth remembering for future sessions.\n\n\
+Store ONLY:\n\
+- User preferences (editor, workflow, naming conventions, config style)\n\
+- User intent and long-term goals\n\
+- Non-obvious system context not re-derivable from inspect\n\n\
+Do NOT store:\n\
+- Facts re-derivable via inspect (CPU, RAM, packages, disk usage, services)\n\
+- One-time transient information\n\
+- Tool outputs or file contents\n\n\
+Output a JSON object with two optional arrays:\n\
+- \"memory\": list of strings to add to MEMORY.md (system facts)\n\
+- \"user\": list of strings to add to USER.md (preferences)\n\
+Output empty arrays if nothing worth remembering.\n\n\
+Conversation:\n{}\n\n\
+JSON:",
+        conversation
+    );
+
+    let messages = vec![
+        serde_json::json!({"role": "system", "content": "You extract memory facts. Be concise. Respond with JSON only."}),
+        serde_json::json!({"role": "user", "content": prompt}),
+    ];
+
+    let tools: Vec<Value> = vec![];
+    let response = runtime
+        .block_on(client.complete(&messages, &tools))
+        .map_err(|e| format!("Memory review LLM call failed: {}", e))?;
+
+    let response_text = response.content;
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(&response_text);
+    let facts = match parsed {
+        Ok(v) => v,
+        Err(_) => {
+            let start = response_text.find('{');
+            let end = response_text.rfind('}');
+            match (start, end) {
+                (Some(s), Some(e)) if e > s => {
+                    serde_json::from_str(&response_text[s..=e]).unwrap_or(serde_json::json!({}))
+                }
+                _ => serde_json::json!({}),
+            }
+        }
+    };
+
+    let mut extracted = 0;
+    let cfg = util::config_dir_str();
+
+    if let Some(memory_items) = facts.get("memory").and_then(|a| a.as_array()) {
+        for item in memory_items {
+            if let Some(text) = item.as_str() {
+                let _ = util::run_agntctl(&[
+                    "memory",
+                    "add",
+                    "memory",
+                    "--section",
+                    "Session",
+                    "--content",
+                    text,
+                    "--config-dir",
+                    &cfg,
+                ]);
+                extracted += 1;
+            }
+        }
+    }
+
+    if let Some(user_items) = facts.get("user").and_then(|a| a.as_array()) {
+        for item in user_items {
+            if let Some(text) = item.as_str() {
+                let _ = util::run_agntctl(&[
+                    "memory",
+                    "add",
+                    "user",
+                    "--section",
+                    "Session",
+                    "--content",
+                    text,
+                    "--config-dir",
+                    &cfg,
+                ]);
+                extracted += 1;
+            }
+        }
+    }
+
+    let _ = util::run_agntctl(&["memory", "consolidate", "memory", "--config-dir", &cfg]);
+    let _ = util::run_agntctl(&["memory", "consolidate", "user", "--config-dir", &cfg]);
+
+    if extracted > 0 {
+        Ok(format!(
+            "Memory review complete. Extracted {} facts.",
+            extracted
+        ))
+    } else {
+        Ok("Memory review complete. Nothing new to store.".to_string())
+    }
+}
+
 /// Seeds `MEMORY.md` with a compact system snapshot on first run.
 /// Does nothing if memory already contains data.
 pub fn seed_memory_if_empty(config_dir: &str, inspect_summary: &str) -> Result<(), String> {

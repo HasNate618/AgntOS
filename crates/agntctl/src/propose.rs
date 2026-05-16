@@ -4,8 +4,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
 
-/// Validates a Nix expression by parsing it with `nix-instantiate --parse`.
-/// Returns Ok(()) if the expression parses cleanly.
 fn validate_nix(content: &str) -> Result<(), String> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -36,7 +34,6 @@ fn validate_nix(content: &str) -> Result<(), String> {
             Err(format!("Nix syntax error:\n{}", stderr.trim()))
         }
         Err(e) => {
-            // nix-instantiate not available — skip validation
             if e.kind() == std::io::ErrorKind::NotFound {
                 Ok(())
             } else {
@@ -245,6 +242,57 @@ fn generate_raw(description: &str) -> Result<ConfigProposal, String> {
                 option_path
             ),
         })
+    } else if lower.starts_with("set-home-option ") {
+        let rest = description
+            .trim()
+            .strip_prefix("set-home-option ")
+            .unwrap_or("");
+        let (option_path, value) = if let Some(idx) = rest.find(" = ") {
+            (
+                rest[..idx].trim().to_string(),
+                rest[idx + 3..].trim().to_string(),
+            )
+        } else if let Some(idx) = rest.find(' ') {
+            (
+                rest[..idx].trim().to_string(),
+                rest[idx + 1..].trim().to_string(),
+            )
+        } else {
+            (rest.trim().to_string(), "true".to_string())
+        };
+        let value_expr = if value == "true" || value == "false" {
+            value
+        } else if value.starts_with('[') || value.starts_with('{') {
+            value
+        } else if value.parse::<f64>().is_ok() {
+            value
+        } else {
+            format!("\"{}\"", value.trim_matches('"'))
+        };
+        let user = std::env::var("AGNTOS_USER").unwrap_or_else(|_| "primary".to_string());
+        let file_name = option_path.replace('.', "-");
+        let file_path = format!("home/{}.nix", file_name);
+        Ok(ConfigProposal {
+            id,
+            summary: format!("Set home option: {} = {}", option_path, value_expr),
+            nix_changes: format!(
+                "home-manager.users.{} = {{\n  {} = {};\n}};",
+                user, option_path, value_expr
+            ),
+            files_to_write: vec![(
+                file_path,
+                format!(
+                    "{{ config, pkgs, lib, ... }}: {{\n  home-manager.users.{} = {{\n    {} = {};\n  }};\n}}\n",
+                    user, option_path, value_expr
+                ),
+            )],
+            files_to_delete: vec![],
+            prompt: None,
+            rollback_guidance: format!(
+                "To rollback: delete home/{}.nix or run `agntctl propose set-home-option {} <original-value>`.",
+                file_name, option_path
+            ),
+        })
     } else {
         Ok(ConfigProposal {
             id,
@@ -353,6 +401,20 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_set_home_option() {
+        let p = generate("set-home-option programs.git.userName nate").unwrap();
+        assert!(p.summary.contains("programs.git.userName"));
+        assert!(p.files_to_write[0].1.contains("home-manager.users"));
+        assert!(p.files_to_write[0].0.starts_with("home/"));
+    }
+
+    #[test]
+    fn test_generate_set_home_option_bool() {
+        let p = generate("set-home-option programs.bash.enable true").unwrap();
+        assert!(p.files_to_write[0].1.contains("true"));
+    }
+
+    #[test]
     fn test_sanitize_package() {
         assert_eq!(sanitize_package_name("VS Code"), "vs-code");
         assert_eq!(sanitize_package_name("Firefox"), "firefox");
@@ -374,13 +436,11 @@ mod tests {
         assert!(!result.contains("DRY RUN"));
         assert!(result.contains("Staged at"));
 
-        // Verify the file was written
         let props = dir.join("proposals");
         assert!(props.exists());
         let entries: Vec<_> = fs::read_dir(&props).unwrap().collect();
         assert!(entries.len() > 0);
 
-        // Cleanup
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -400,7 +460,6 @@ mod tests {
         .unwrap();
         assert!(result.contains("Staged at"));
 
-        // Read the proposal JSON and verify prompt field
         let props_dir = dir.join("proposals");
         let mut entries: Vec<_> = fs::read_dir(&props_dir).unwrap().collect();
         assert!(!entries.is_empty());
@@ -425,7 +484,6 @@ mod tests {
         let result = execute("install htop", false, Some(&dir), None, None).unwrap();
         assert!(result.contains("Staged at"));
 
-        // Read the proposal JSON and verify prompt is None (backward compat)
         let props_dir = dir.join("proposals");
         let mut entries: Vec<_> = fs::read_dir(&props_dir).unwrap().collect();
         assert!(!entries.is_empty());
