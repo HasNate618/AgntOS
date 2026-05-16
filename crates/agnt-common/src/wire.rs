@@ -36,7 +36,7 @@ pub enum ClientMessage {
         limit: u32,
     },
     #[serde(rename = "cancel")]
-    Cancel {},
+    Cancel,
 }
 
 fn default_system() -> String {
@@ -99,9 +99,7 @@ pub enum ServerMessage {
     #[serde(rename = "turn_complete")]
     TurnComplete { content: String },
     #[serde(rename = "audit_response")]
-    AuditResponse {
-        entries: Vec<serde_json::Value>,
-    },
+    AuditResponse { entries: Vec<serde_json::Value> },
     #[serde(rename = "event")]
     Event {
         event: String,
@@ -141,7 +139,9 @@ mod tests {
 
     #[test]
     fn client_message_chat_serialization() {
-        let msg = ClientMessage::Chat { prompt: "install nginx".to_string() };
+        let msg = ClientMessage::Chat {
+            prompt: "install nginx".to_string(),
+        };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"type\":\"chat\""));
         assert!(json.contains("install nginx"));
@@ -167,9 +167,16 @@ mod tests {
     #[test]
     fn roundtrip_client_messages() {
         let messages = vec![
-            ClientMessage::Approve { proposal_id: "p-abc".to_string() },
-            ClientMessage::Dismiss { proposal_id: "p-abc".to_string(), reason: Some("not needed".to_string()) },
-            ClientMessage::Status { target: "system".to_string() },
+            ClientMessage::Approve {
+                proposal_id: "p-abc".to_string(),
+            },
+            ClientMessage::Dismiss {
+                proposal_id: "p-abc".to_string(),
+                reason: Some("not needed".to_string()),
+            },
+            ClientMessage::Status {
+                target: "system".to_string(),
+            },
             ClientMessage::Cancel {},
         ];
         for msg in &messages {
@@ -183,9 +190,20 @@ mod tests {
     #[test]
     fn roundtrip_server_messages() {
         let messages = vec![
-            ServerMessage::SessionReady { profile: "local".to_string(), model: "qwen".to_string(), pending_proposals: vec![] },
-            ServerMessage::ToolCall { id: "tc-1".to_string(), name: "inspect".to_string(), args: serde_json::json!({}), status: ToolCallStatus::Running },
-            ServerMessage::Error { message: "test".to_string() },
+            ServerMessage::SessionReady {
+                profile: "local".to_string(),
+                model: "qwen".to_string(),
+                pending_proposals: vec![],
+            },
+            ServerMessage::ToolCall {
+                id: "tc-1".to_string(),
+                name: "inspect".to_string(),
+                args: serde_json::json!({}),
+                status: ToolCallStatus::Running,
+            },
+            ServerMessage::Error {
+                message: "test".to_string(),
+            },
         ];
         for msg in &messages {
             let json = serde_json::to_string(msg).unwrap();
