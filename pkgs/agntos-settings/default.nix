@@ -18,7 +18,7 @@ rustPlatform.buildRustPackage {
   cargoBuildFlags = [ "-p" "agntos-settings" ];
 
   nativeBuildInputs = [ pkg-config qt6.qtdeclarative qt6.qttools qt6.wrapQtAppsHook ];
-  buildInputs = [ openssl kirigami ];
+  buildInputs = [ openssl qt6.qtdeclarative qt6.qtbase kirigami ];
 
   cargoLock = {
     lockFile = ../../Cargo.lock;
@@ -41,6 +41,10 @@ Categories=System;Settings;
 Keywords=agent;ai;nixos;settings;
 EOF
   '';
+
+  qtWrapperArgs = [
+    "--prefix" "QML2_IMPORT_PATH" ":" "${kirigami}/${kirigami.qtQmlPrefix}"
+  ];
 
   meta = {
     description = "Kirigami GUI for AgntOS agent configuration";

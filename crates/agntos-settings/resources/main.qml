@@ -11,7 +11,12 @@ Kirigami.ApplicationWindow {
     minimumWidth: 400
     minimumHeight: 300
 
-    property bool connected: false
+    property bool connected: appBridge ? appBridge.connected : false
+
+    Connections {
+        target: appBridge
+        function onStatusChanged() { root.connected = appBridge.connected }
+    }
 
     globalDrawer: Kirigami.GlobalDrawer {
         title: "AgntOS"
@@ -63,17 +68,32 @@ Kirigami.ApplicationWindow {
 
     pageStack.initialPage: ChatPage {
         id: chatPage
+        chatModel: appBridge.chatItems
+        isProcessing: appBridge.isProcessing
+
+        function sendChat(text) {
+            appBridge.send_chat(text)
+        }
     }
 
     pageStack.extendedLayers: [
         StatusPage {
             id: statusPage
+            statusModel: appBridge
+            onRefreshRequested: appBridge.refresh_status()
         },
         ProposalsPage {
             id: proposalsPage
+            proposalModel: appBridge.proposalItems
+            onApply: function(id) { appBridge.approve_proposal(id) }
+            onDismiss: function(id) { appBridge.dismiss_proposal(id) }
+            onRefreshRequested: appBridge.refresh_proposals()
         },
         ActivityPage {
             id: activityPage
+            auditModel: appBridge.auditItems
+            onSearch: function(query) { appBridge.search_audit(query) }
+            onRefreshRequested: appBridge.load_audit(50)
         }
     ]
 }

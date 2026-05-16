@@ -7,6 +7,7 @@ edition = "2021"
 agnt-common = { path = "../agnt-common" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+qmetaobject = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
