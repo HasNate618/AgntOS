@@ -3,6 +3,8 @@
 use crate::backend::Connection;
 use agnt_common::wire::*;
 use qmetaobject::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 fn str_qv(s: &str) -> QVariant {
     QVariant::from(QString::from(s))
@@ -172,24 +174,24 @@ fn make_audit_list(entries: &[serde_json::Value]) -> QVariantList {
 pub struct AppBridge {
     pub base: qt_base_class!(trait QObject),
 
-    pub chatItems: qt_property!(QVariant; NOTIFY chatChanged),
-    pub isProcessing: qt_property!(bool; NOTIFY processingChanged),
+    pub chat_items: qt_property!(QVariant; NOTIFY chatChanged),
+    pub is_processing: qt_property!(bool; NOTIFY processingChanged),
 
     pub connected: qt_property!(bool; NOTIFY statusChanged),
-    pub profileName: qt_property!(QString; NOTIFY statusChanged),
-    pub modelName: qt_property!(QString; NOTIFY statusChanged),
+    pub profile_name: qt_property!(QString; NOTIFY statusChanged),
+    pub model_name: qt_property!(QString; NOTIFY statusChanged),
     pub endpoint: qt_property!(QString; NOTIFY statusChanged),
-    pub cpuInfo: qt_property!(QString; NOTIFY statusChanged),
-    pub ramUsed: qt_property!(QString; NOTIFY statusChanged),
-    pub diskUsed: qt_property!(QString; NOTIFY statusChanged),
-    pub failedUnits: qt_property!(i32; NOTIFY statusChanged),
-    pub watchdogInterval: qt_property!(i32; NOTIFY statusChanged),
-    pub watchdogDiskThreshold: qt_property!(i32; NOTIFY statusChanged),
-    pub watchdogAlertCount: qt_property!(i32; NOTIFY statusChanged),
-    pub lastCheckTime: qt_property!(QString; NOTIFY statusChanged),
+    pub cpu_info: qt_property!(QString; NOTIFY statusChanged),
+    pub ram_used: qt_property!(QString; NOTIFY statusChanged),
+    pub disk_used: qt_property!(QString; NOTIFY statusChanged),
+    pub failed_units: qt_property!(i32; NOTIFY statusChanged),
+    pub watchdog_interval: qt_property!(i32; NOTIFY statusChanged),
+    pub watchdog_disk_threshold: qt_property!(i32; NOTIFY statusChanged),
+    pub watchdog_alert_count: qt_property!(i32; NOTIFY statusChanged),
+    pub last_check_time: qt_property!(QString; NOTIFY statusChanged),
 
-    pub proposalItems: qt_property!(QVariant; NOTIFY proposalsChanged),
-    pub auditItems: qt_property!(QVariant; NOTIFY auditChanged),
+    pub proposal_items: qt_property!(QVariant; NOTIFY proposalsChanged),
+    pub audit_items: qt_property!(QVariant; NOTIFY auditChanged),
 
     pub chatChanged: qt_signal!(),
     pub processingChanged: qt_signal!(),
@@ -198,12 +200,13 @@ pub struct AppBridge {
     pub auditChanged: qt_signal!(),
 
     pub socket_path: String,
-    pub chat_entries: Vec<serde_json::Value>,
+    pub chat_entries: Arc<Mutex<Vec<serde_json::Value>>>,
+    pub pending_updates: Arc<AtomicBool>,
 
     pub clear_chat: qt_method!(
         pub fn clear_chat(&mut self) {
-            self.chat_entries.clear();
-            self.chatItems = QVariant::from(QVariantList::default());
+            self.chat_entries.lock().unwrap().clear();
+            self.chat_items = QVariant::from(QVariantList::default());
             self.chatChanged();
         }
     ),
@@ -215,8 +218,8 @@ pub struct AppBridge {
                 let r2 = conn.handshake(Some("/etc/agntos"));
                 if let Ok(ServerMessage::SessionReady { profile, model, .. }) = r2 {
                     self.connected = true;
-                    self.profileName = QString::from(profile.as_str());
-                    self.modelName = QString::from(model.as_str());
+                    self.profile_name = QString::from(profile.as_str());
+                    self.model_name = QString::from(model.as_str());
                     self.statusChanged();
                     return;
                 }
@@ -228,55 +231,54 @@ pub struct AppBridge {
 
     pub send_chat: qt_method!(
         pub fn send_chat(&mut self, prompt: QString) {
-            self.isProcessing = true;
+            self.is_processing = true;
             self.processingChanged();
 
             let prompt_str = prompt.to_string();
-            self.chat_entries
-                .push(make_entry("user", &[("content", &prompt_str)]));
-            self.sync_chat();
+            {
+                let mut entries = self.chat_entries.lock().unwrap();
+                entries.push(make_entry("user", &[("content", &prompt_str)]));
+            }
+            self.pending_updates.store(true, Ordering::SeqCst);
 
-            let mut conn = match Connection::connect(&self.socket_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    self.chat_entries.push(make_entry(
+            let socket_path = self.socket_path.clone();
+            let entries = self.chat_entries.clone();
+            let pending = self.pending_updates.clone();
+
+            std::thread::spawn(move || {
+                let mut conn = match Connection::connect(&socket_path) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        entries.lock().unwrap().push(make_entry(
+                            "assistant",
+                            &[("content", &format!("Connection error: {}", e))],
+                        ));
+                        pending.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                };
+
+                if conn.handshake(None).is_err() {
+                    entries.lock().unwrap().push(make_entry(
                         "assistant",
-                        &[("content", &format!("Connection error: {}", e))],
+                        &[("content", "Failed to connect to agent.")],
                     ));
-                    self.sync_chat();
-                    self.isProcessing = false;
-                    self.processingChanged();
+                    pending.store(true, Ordering::SeqCst);
                     return;
                 }
-            };
 
-            if conn.handshake(None).is_err() {
-                self.chat_entries.push(make_entry(
-                    "assistant",
-                    &[("content", "Failed to connect to agent.")],
-                ));
-                self.sync_chat();
-                self.isProcessing = false;
-                self.processingChanged();
-                return;
-            }
+                let msg = ClientMessage::Chat { prompt: prompt_str };
+                if conn.send(&msg).is_err() {
+                    entries.lock().unwrap().push(make_entry(
+                        "assistant",
+                        &[("content", "Failed to send message.")],
+                    ));
+                    pending.store(true, Ordering::SeqCst);
+                    return;
+                }
 
-            let msg = ClientMessage::Chat { prompt: prompt_str };
-            if conn.send(&msg).is_err() {
-                self.chat_entries.push(make_entry(
-                    "assistant",
-                    &[("content", "Failed to send message.")],
-                ));
-                self.sync_chat();
-                self.isProcessing = false;
-                self.processingChanged();
-                return;
-            }
-
-            self.read_chat_responses(&mut conn);
-
-            self.isProcessing = false;
-            self.processingChanged();
+                AppBridge::read_chat_responses_thread(&mut conn, &entries, &pending);
+            });
         }
     ),
 
@@ -305,7 +307,7 @@ pub struct AppBridge {
                     }
                 }
             }
-            self.proposalItems = QVariant::from(proposals.into_iter().collect::<QVariantList>());
+            self.proposal_items = QVariant::from(proposals.into_iter().collect::<QVariantList>());
             self.proposalsChanged();
         }
     ),
@@ -325,11 +327,11 @@ pub struct AppBridge {
                     for line in output.lines() {
                         let lower = line.to_lowercase();
                         if lower.contains("cpu") {
-                            self.cpuInfo = QString::from(line);
+                            self.cpu_info = QString::from(line);
                         } else if lower.contains("ram") || lower.contains("memory") {
-                            self.ramUsed = QString::from(line);
+                            self.ram_used = QString::from(line);
                         } else if lower.contains("disk") {
-                            self.diskUsed = QString::from(line);
+                            self.disk_used = QString::from(line);
                         }
                     }
                     self.statusChanged();
@@ -378,9 +380,18 @@ pub struct AppBridge {
                 };
                 conn.send(&msg).ok();
                 if let Ok(ServerMessage::AuditResponse { entries }) = conn.recv() {
-                    self.auditItems = QVariant::from(make_audit_list(&entries));
+                    self.audit_items = QVariant::from(make_audit_list(&entries));
                     self.auditChanged();
                 }
+            }
+        }
+    ),
+
+    pub poll_updates: qt_method!(
+        pub fn poll_updates(&mut self) {
+            if self.pending_updates.swap(false, Ordering::SeqCst) {
+                self.chat_items = entries_to_qvariant(&self.chat_entries.lock().unwrap());
+                self.chatChanged();
             }
         }
     ),
@@ -398,7 +409,7 @@ pub struct AppBridge {
                 };
                 conn.send(&msg).ok();
                 if let Ok(ServerMessage::AuditResponse { entries }) = conn.recv() {
-                    self.auditItems = QVariant::from(make_audit_list(&entries));
+                    self.audit_items = QVariant::from(make_audit_list(&entries));
                     self.auditChanged();
                 }
             }
@@ -410,27 +421,28 @@ impl AppBridge {
     pub fn new(socket_path: &str) -> Self {
         let mut bridge = AppBridge::default();
         bridge.socket_path = socket_path.to_string();
-        bridge.chatItems = QVariant::from(QVariantList::default());
-        bridge.proposalItems = QVariant::from(QVariantList::default());
-        bridge.auditItems = QVariant::from(QVariantList::default());
+        bridge.chat_items = QVariant::from(QVariantList::default());
+        bridge.proposal_items = QVariant::from(QVariantList::default());
+        bridge.audit_items = QVariant::from(QVariantList::default());
         bridge
     }
 
-    fn sync_chat(&mut self) {
-        self.chatItems = entries_to_qvariant(&self.chat_entries);
-        self.chatChanged();
-    }
-
-    fn read_chat_responses(&mut self, conn: &mut Connection) {
+    /// Background thread: reads responses and writes to shared buffer.
+    fn read_chat_responses_thread(
+        conn: &mut Connection,
+        entries: &Arc<Mutex<Vec<serde_json::Value>>>,
+        pending: &Arc<AtomicBool>,
+    ) {
         loop {
             let r = conn.recv();
+            let mut lock = entries.lock().unwrap();
             match r {
                 Ok(ServerMessage::Token { content }) => {
-                    let can_append = self.chat_entries.last().map_or(false, |last| {
+                    let can_append = lock.last().map_or(false, |last| {
                         last.get("entryType").and_then(|v| v.as_str()) == Some("assistant")
                     });
                     if can_append {
-                        if let Some(last) = self.chat_entries.last_mut() {
+                        if let Some(last) = lock.last_mut() {
                             if let Some(obj) = last.as_object_mut() {
                                 let existing = obj
                                     .get("content")
@@ -440,72 +452,56 @@ impl AppBridge {
                                     "content".into(),
                                     serde_json::Value::String(format!("{}{}", existing, content)),
                                 );
-                                self.sync_chat();
                             }
                         }
                     } else {
-                        self.chat_entries
-                            .push(make_entry("assistant", &[("content", &content)]));
-                        self.sync_chat();
+                        lock.push(make_entry("assistant", &[("content", &content)]));
                     }
+                    pending.store(true, Ordering::SeqCst);
                 }
                 Ok(ServerMessage::ToolCall {
-                    id,
-                    name,
-                    args,
-                    status,
+                    id, name, args, status,
                 }) => {
                     let s = match status {
                         ToolCallStatus::Running => "running",
                         ToolCallStatus::Done => "done",
                     };
                     let args_str = serde_json::to_string(&args).unwrap_or_default();
-                    self.chat_entries
-                        .push(make_tool_call_entry(&id, &name, &args_str, s));
-                    self.sync_chat();
+                    lock.push(make_tool_call_entry(&id, &name, &args_str, s));
+                    pending.store(true, Ordering::SeqCst);
                 }
                 Ok(ServerMessage::ToolResult {
                     output, success, ..
                 }) => {
-                    if let Some(last) = self.chat_entries.last_mut() {
+                    if let Some(last) = lock.last_mut() {
                         if let Some(obj) = last.as_object_mut() {
-                            obj.insert(
-                                "entryType".into(),
-                                serde_json::Value::String("tool_result".into()),
-                            );
+                            obj.insert("entryType".into(),
+                                serde_json::Value::String("tool_result".into()));
                             obj.insert("content".into(), serde_json::Value::String(output));
                             obj.insert("toolSuccess".into(), serde_json::Value::Bool(success));
-                            obj.insert(
-                                "toolStatus".into(),
-                                serde_json::Value::String("done".into()),
-                            );
-                            self.sync_chat();
+                            obj.insert("toolStatus".into(),
+                                serde_json::Value::String("done".into()));
+                            pending.store(true, Ordering::SeqCst);
                         }
                     }
                 }
                 Ok(ServerMessage::ApprovalRequest {
-                    proposal_id,
-                    summary,
-                    ..
+                    proposal_id, summary, ..
                 }) => {
-                    self.chat_entries
-                        .push(make_approval_entry(&proposal_id, &summary));
-                    self.sync_chat();
+                    lock.push(make_approval_entry(&proposal_id, &summary));
+                    pending.store(true, Ordering::SeqCst);
                 }
                 Ok(ServerMessage::TurnComplete { content }) => {
                     if !content.is_empty() && content != "(cancelled)" {
-                        self.chat_entries
-                            .push(make_entry("assistant", &[("content", &content)]));
-                        self.sync_chat();
+                        lock.push(make_entry("assistant", &[("content", &content)]));
+                        pending.store(true, Ordering::SeqCst);
                     }
                     break;
                 }
                 Ok(ServerMessage::Error { message }) => {
-                    self.chat_entries.push(make_entry(
-                        "assistant",
-                        &[("content", &format!("Error: {}", message))],
-                    ));
-                    self.sync_chat();
+                    lock.push(make_entry("assistant",
+                        &[("content", &format!("Error: {}", message))]));
+                    pending.store(true, Ordering::SeqCst);
                     break;
                 }
                 Ok(_) => {}

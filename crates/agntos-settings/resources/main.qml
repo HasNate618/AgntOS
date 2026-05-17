@@ -9,6 +9,14 @@ ApplicationWindow {
     height: 700
     visible: true
 
+    // Poll for background thread updates (chat responses)
+    Timer {
+        interval: 100
+        running: true
+        repeat: true
+        onTriggered: appBridge.poll_updates()
+    }
+
     property int currentPage: 0
 
     header: TabBar {
