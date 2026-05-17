@@ -151,7 +151,13 @@ fn run_socket_mode(socket_path: &str) {
 
     let _ = std::fs::remove_file(socket_path);
     let listener = match UnixListener::bind(socket_path) {
-        Ok(l) => l,
+        Ok(l) => {
+            // Make the socket world-writable so any user (e.g. the desktop
+            // user) can connect to agntd without XDG_RUNTIME_DIR auth issues.
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o777));
+            l
+        }
         Err(e) => {
             eprintln!("agntd: failed to bind socket at {}: {}", socket_path, e);
             std::process::exit(1);
