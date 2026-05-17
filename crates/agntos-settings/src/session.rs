@@ -1,4 +1,4 @@
-use crate::models::chat_model::{ChatEntryType, ChatModel};
+use crate::models::chat_model::{ChatEntry, ChatEntryType, ChatModel};
 use crate::models::proposal_model::{Proposal, ProposalStatus};
 use agnt_common::wire::*;
 
@@ -115,6 +115,12 @@ fn strip_thinking(content: &str, in_thinking: &mut bool) -> Option<String> {
     if result.trim().is_empty() { None } else { Some(result) }
 }
 
+impl Default for AppSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppSession {
     pub fn new() -> Self {
         Self {
@@ -198,9 +204,9 @@ impl AppSession {
             }
 
             ServerMessage::ToolCall { id, name, args, status } => {
-                self.chat.add_tool_call(id, name, args.clone());
                 match status {
                     ToolCallStatus::Running => {
+                        self.chat.add_tool_call(id, name, args.clone());
                         self.turn_state = TurnState::ToolRunning {
                             name: name.clone(),
                             detail: args.to_string(),
@@ -208,7 +214,20 @@ impl AppSession {
                     }
                     ToolCallStatus::Done => {
                         if let Some(entry) = self.chat.entries.iter_mut().rev().find(|e| e.tool_id.as_deref() == Some(id.as_str())) {
-                            entry.entry_type = ChatEntryType::ToolResult;
+                            entry.tool_status = Some("done".to_string());
+                        } else {
+                            let entry = ChatEntry {
+                                entry_type: ChatEntryType::ToolResult,
+                                content: String::new(),
+                                tool_name: Some(name.clone()),
+                                tool_id: Some(id.clone()),
+                                tool_args: Some(args.clone()),
+                                tool_status: Some("done".to_string()),
+                                tool_success: None,
+                                proposal_id: None,
+                                proposal_summary: None,
+                            };
+                            self.chat.entries.push(entry);
                         }
                     }
                 }

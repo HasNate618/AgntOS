@@ -16,6 +16,7 @@ pub struct ChatEntry {
     pub tool_name: Option<String>,
     pub tool_id: Option<String>,
     pub tool_args: Option<Value>,
+    pub tool_status: Option<String>,
     pub tool_success: Option<bool>,
     pub proposal_id: Option<String>,
     pub proposal_summary: Option<String>,
@@ -24,6 +25,12 @@ pub struct ChatEntry {
 #[derive(Debug, Clone)]
 pub struct ChatModel {
     pub entries: Vec<ChatEntry>,
+}
+
+impl Default for ChatModel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ChatModel {
@@ -40,6 +47,7 @@ impl ChatModel {
             tool_name: None,
             tool_id: None,
             tool_args: None,
+            tool_status: None,
             tool_success: None,
             proposal_id: None,
             proposal_summary: None,
@@ -53,6 +61,7 @@ impl ChatModel {
             tool_name: None,
             tool_id: None,
             tool_args: None,
+            tool_status: None,
             tool_success: None,
             proposal_id: None,
             proposal_summary: None,
@@ -74,6 +83,7 @@ impl ChatModel {
             tool_name: Some(name.to_string()),
             tool_id: Some(id.to_string()),
             tool_args: Some(args),
+            tool_status: Some("running".to_string()),
             tool_success: None,
             proposal_id: None,
             proposal_summary: None,
@@ -89,6 +99,7 @@ impl ChatModel {
         {
             entry.entry_type = ChatEntryType::ToolResult;
             entry.content = output.to_string();
+            entry.tool_status = Some("done".to_string());
             entry.tool_success = Some(success);
         }
     }
@@ -100,6 +111,7 @@ impl ChatModel {
             tool_name: Some("apply".to_string()),
             tool_id: Some(tool_call_id.to_string()),
             tool_args: None,
+            tool_status: None,
             tool_success: None,
             proposal_id: Some(proposal_id.to_string()),
             proposal_summary: Some(summary.to_string()),

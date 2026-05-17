@@ -1,57 +1,16 @@
 #![allow(non_snake_case)]
 
 use crate::backend::Connection;
+use crate::models::proposal_model::{Proposal, ProposalStatus};
+use crate::session::{AppSession, AuditEntry, ConnectionState, TurnState};
 use agnt_common::wire::*;
 use qmetaobject::listmodel::SimpleListItem;
 use qmetaobject::*;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-fn make_entry(entry_type: &str, pairs: &[(&str, &str)]) -> serde_json::Value {
-    let mut obj = serde_json::Map::new();
-    obj.insert("entryType".into(), serde_json::Value::String(entry_type.into()));
-    for (k, v) in pairs {
-        obj.insert(k.to_string(), serde_json::Value::String(v.to_string()));
-    }
-    serde_json::Value::Object(obj)
-}
-
-fn make_tool_call_entry(id: &str, name: &str, args: &str, status: &str) -> serde_json::Value {
-    let mut obj = serde_json::Map::new();
-    obj.insert("entryType".into(), serde_json::Value::String("tool_call".into()));
-    obj.insert("toolName".into(), serde_json::Value::String(name.into()));
-    obj.insert("toolId".into(), serde_json::Value::String(id.into()));
-    obj.insert("toolArgs".into(), serde_json::Value::String(args.into()));
-    obj.insert("toolStatus".into(), serde_json::Value::String(status.into()));
-    obj.insert("content".into(), serde_json::Value::String(String::new()));
-    serde_json::Value::Object(obj)
-}
-
-fn make_approval_entry(proposal_id: &str, summary: &str) -> serde_json::Value {
-    let mut obj = serde_json::Map::new();
-    obj.insert("entryType".into(), serde_json::Value::String("approval".into()));
-    obj.insert("proposalId".into(), serde_json::Value::String(proposal_id.into()));
-    obj.insert("proposalSummary".into(), serde_json::Value::String(summary.into()));
-    serde_json::Value::Object(obj)
-}
-
-fn make_audit_list(entries: &[serde_json::Value]) -> QVariantList {
-    entries.iter().map(|e| {
-        let mut m = QVariantMap::default();
-        let insert = |m: &mut QVariantMap, k: &str, v: &str| { m.insert(QString::from(k), QVariant::from(QString::from(v))); };
-        insert(&mut m, "auditId", e.get("id").and_then(|v| v.as_str()).unwrap_or(""));
-        insert(&mut m, "timestamp", e.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""));
-        insert(&mut m, "actionType", e.get("action").and_then(|a| a.get("type")).and_then(|v| v.as_str()).unwrap_or(""));
-        insert(&mut m, "summary", e.get("summary").and_then(|v| v.as_str()).unwrap_or(""));
-        insert(&mut m, "status", e.get("result").and_then(|r| r.get("status")).and_then(|v| v.as_str()).unwrap_or("unknown"));
-        insert(&mut m, "prompt", e.get("prompt").and_then(|v| v.as_str()).unwrap_or(""));
-        insert(&mut m, "actor", e.get("actor").and_then(|v| v.as_str()).unwrap_or(""));
-        QVariant::from(m)
-    }).collect()
-}
-
-// ── ChatEntry: model item with explicit role names ──────────────────────────
+// ── ChatEntry: model item for QML ──────────────────────────────────────────
 
 #[derive(Clone, Default)]
 pub struct ChatEntry {
@@ -64,6 +23,20 @@ pub struct ChatEntry {
     pub tool_success: bool,
     pub proposal_id: String,
     pub proposal_summary: String,
+}
+
+fn to_qml_chat_entry(e: &crate::models::chat_model::ChatEntry) -> ChatEntry {
+    ChatEntry {
+        entry_type: format!("{:?}", e.entry_type).to_lowercase(),
+        content: e.content.clone(),
+        tool_name: e.tool_name.as_deref().unwrap_or("").to_string(),
+        tool_id: e.tool_id.as_deref().unwrap_or("").to_string(),
+        tool_args: e.tool_args.as_ref().map(|v| v.to_string()).unwrap_or_default(),
+        tool_status: e.tool_status.as_deref().unwrap_or("").to_string(),
+        tool_success: e.tool_success.unwrap_or(false),
+        proposal_id: e.proposal_id.as_deref().unwrap_or("").to_string(),
+        proposal_summary: e.proposal_summary.as_deref().unwrap_or("").to_string(),
+    }
 }
 
 impl SimpleListItem for ChatEntry {
@@ -96,22 +69,40 @@ impl SimpleListItem for ChatEntry {
     }
 }
 
-fn json_to_chat_entry(val: &serde_json::Value) -> ChatEntry {
-    ChatEntry {
-        entry_type: val.get("entryType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        content: val.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        tool_name: val.get("toolName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        tool_id: val.get("toolId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        tool_args: val.get("toolArgs").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        tool_status: val.get("toolStatus").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        tool_success: val.get("toolSuccess").and_then(|v| v.as_bool()).unwrap_or(false),
-        proposal_id: val.get("proposalId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        proposal_summary: val.get("proposalSummary").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-    }
-}
-
 use qmetaobject::listmodel::SimpleListModel;
 pub type ChatModel = SimpleListModel<ChatEntry>;
+
+fn make_proposal_list(proposals: &[Proposal]) -> QVariantList {
+    proposals.iter().map(|p| {
+        let mut m = QVariantMap::default();
+        m.insert(QString::from("proposalId"), QVariant::from(QString::from(p.proposal_id.as_str())));
+        m.insert(QString::from("summary"), QVariant::from(QString::from(p.summary.as_str())));
+        m.insert(QString::from("nixChanges"), QVariant::from(QString::from(p.nix_changes.as_str())));
+        m.insert(QString::from("rollbackGuidance"), QVariant::from(QString::from(p.rollback_guidance.as_str())));
+        let status = match &p.status {
+            ProposalStatus::Pending => "pending",
+            ProposalStatus::Applied => "applied",
+            ProposalStatus::Dismissed => "dismissed",
+        };
+        m.insert(QString::from("status"), QVariant::from(QString::from(status)));
+        m.insert(QString::from("createdAt"), QVariant::from(QString::from(p.created_at.as_str())));
+        QVariant::from(m)
+    }).collect()
+}
+
+fn make_audit_list(entries: &[AuditEntry]) -> QVariantList {
+    entries.iter().map(|e| {
+        let mut m = QVariantMap::default();
+        m.insert(QString::from("auditId"), QVariant::from(QString::from(e.audit_id.as_str())));
+        m.insert(QString::from("timestamp"), QVariant::from(QString::from(e.timestamp.as_str())));
+        m.insert(QString::from("actionType"), QVariant::from(QString::from(e.action_type.as_str())));
+        m.insert(QString::from("summary"), QVariant::from(QString::from(e.summary.as_str())));
+        m.insert(QString::from("status"), QVariant::from(QString::from(e.status.as_str())));
+        m.insert(QString::from("prompt"), QVariant::from(QString::from(e.prompt.as_str())));
+        m.insert(QString::from("actor"), QVariant::from(QString::from(e.actor.as_str())));
+        QVariant::from(m)
+    }).collect()
+}
 
 // ── AppBridge ───────────────────────────────────────────────────────────────
 
@@ -120,17 +111,16 @@ pub struct AppBridge {
     pub base: qt_base_class!(trait QObject),
 
     pub is_processing: qt_property!(bool; NOTIFY processingChanged),
+    pub turn_state: qt_property!(QString; NOTIFY stateChanged),
+    pub connection_state: qt_property!(QString; NOTIFY stateChanged),
 
     pub connected: qt_property!(bool; NOTIFY statusChanged),
     pub profile_name: qt_property!(QString; NOTIFY statusChanged),
     pub model_name: qt_property!(QString; NOTIFY statusChanged),
-    pub endpoint: qt_property!(QString; NOTIFY statusChanged),
     pub cpu_info: qt_property!(QString; NOTIFY statusChanged),
     pub ram_used: qt_property!(QString; NOTIFY statusChanged),
     pub disk_used: qt_property!(QString; NOTIFY statusChanged),
     pub failed_units: qt_property!(i32; NOTIFY statusChanged),
-    pub watchdog_interval: qt_property!(i32; NOTIFY statusChanged),
-    pub watchdog_disk_threshold: qt_property!(i32; NOTIFY statusChanged),
     pub watchdog_alert_count: qt_property!(i32; NOTIFY statusChanged),
     pub last_check_time: qt_property!(QString; NOTIFY statusChanged),
 
@@ -140,13 +130,15 @@ pub struct AppBridge {
     pub chat_model: qt_property!(RefCell<ChatModel>; CONST),
 
     pub processingChanged: qt_signal!(),
+    pub stateChanged: qt_signal!(),
     pub statusChanged: qt_signal!(),
     pub proposalsChanged: qt_signal!(),
     pub auditChanged: qt_signal!(),
 
     pub socket_path: String,
-    pub chat_entries: Arc<Mutex<Vec<serde_json::Value>>>,
-    pub pending_updates: Arc<AtomicBool>,
+    pub session: Arc<Mutex<AppSession>>,
+    pub session_change: Arc<AtomicU64>,
+    pub last_seen_change: u64,
     pub chat_connection: Arc<Mutex<Option<Connection>>>,
     pub is_processing_flag: Arc<AtomicBool>,
     pub retry_count: u64,
@@ -154,8 +146,9 @@ pub struct AppBridge {
 
     pub clear_chat: qt_method!(
         pub fn clear_chat(&mut self) {
-            self.chat_entries.lock().unwrap().clear();
-            self.chat_model.borrow_mut().reset_data(Vec::new());
+            let mut s = self.session.lock().unwrap();
+            s.chat.clear();
+            self.session_change.fetch_add(1, Ordering::SeqCst);
         }
     ),
 
@@ -166,6 +159,11 @@ pub struct AppBridge {
                 let r2 = conn.handshake(Some("/etc/agntos"));
                 if let Ok(ServerMessage::SessionReady { profile, model, .. }) = r2 {
                     eprintln!("[bridge] connect_to_agent: SUCCESS profile={}", profile);
+                    let mut s = self.session.lock().unwrap();
+                    s.connection_state = ConnectionState::Connected;
+                    s.profile = profile.clone();
+                    s.model = model.clone();
+                    self.session_change.fetch_add(1, Ordering::SeqCst);
                     self.connected = true;
                     self.retry_count = 0;
                     self.backoff_until_ms = 0;
@@ -199,14 +197,14 @@ pub struct AppBridge {
 
             let prompt_str = prompt.to_string();
             {
-                let mut entries = self.chat_entries.lock().unwrap();
-                entries.push(make_entry("user", &[("content", &prompt_str)]));
+                let mut s = self.session.lock().unwrap();
+                s.chat.add_user_message(&prompt_str);
             }
-            self.pending_updates.store(true, Ordering::SeqCst);
+            self.session_change.fetch_add(1, Ordering::SeqCst);
 
             let socket_path = self.socket_path.clone();
-            let entries = self.chat_entries.clone();
-            let pending = self.pending_updates.clone();
+            let session = self.session.clone();
+            let change_cnt = self.session_change.clone();
             let is_proc = self.is_processing_flag.clone();
             let chat_conn = self.chat_connection.clone();
 
@@ -214,25 +212,28 @@ pub struct AppBridge {
                 let mut conn = match Connection::connect(&socket_path) {
                     Ok(c) => c,
                     Err(e) => {
-                        entries.lock().unwrap().push(make_entry(
-                            "assistant", &[("content", &format!("Connection error: {}", e))]));
-                        pending.store(true, Ordering::SeqCst);
+                        let mut s = session.lock().unwrap();
+                        s.chat.add_assistant_text(&format!("Connection error: {}", e));
+                        s.turn_state = TurnState::Error { message: e.to_string() };
+                        change_cnt.fetch_add(1, Ordering::SeqCst);
                         is_proc.store(false, Ordering::SeqCst);
                         return;
                     }
                 };
                 if conn.handshake(None).is_err() {
-                    entries.lock().unwrap().push(make_entry(
-                        "assistant", &[("content", "Failed to connect to agent.")]));
-                    pending.store(true, Ordering::SeqCst);
+                    let mut s = session.lock().unwrap();
+                    s.chat.add_assistant_text("Failed to connect to agent.");
+                    s.turn_state = TurnState::Error { message: "handshake failed".to_string() };
+                    change_cnt.fetch_add(1, Ordering::SeqCst);
                     is_proc.store(false, Ordering::SeqCst);
                     return;
                 }
                 let msg = ClientMessage::Chat { prompt: prompt_str };
                 if conn.send(&msg).is_err() {
-                    entries.lock().unwrap().push(make_entry(
-                        "assistant", &[("content", "Failed to send message.")]));
-                    pending.store(true, Ordering::SeqCst);
+                    let mut s = session.lock().unwrap();
+                    s.chat.add_assistant_text("Failed to send message.");
+                    s.turn_state = TurnState::Error { message: "send failed".to_string() };
+                    change_cnt.fetch_add(1, Ordering::SeqCst);
                     is_proc.store(false, Ordering::SeqCst);
                     return;
                 }
@@ -240,9 +241,9 @@ pub struct AppBridge {
                 if let Ok(reader_conn) = conn.try_clone() {
                     *chat_conn.lock().unwrap() = Some(conn);
                     let mut rc = reader_conn;
-                    AppBridge::read_chat_responses_thread(&mut rc, &entries, &pending, &is_proc);
+                    AppBridge::read_chat_responses_thread(&mut rc, &session, &change_cnt, &is_proc);
                 } else {
-                    AppBridge::read_chat_responses_thread(&mut conn, &entries, &pending, &is_proc);
+                    AppBridge::read_chat_responses_thread(&mut conn, &session, &change_cnt, &is_proc);
                 }
             });
         }
@@ -250,48 +251,28 @@ pub struct AppBridge {
 
     pub refresh_proposals: qt_method!(
         pub fn refresh_proposals(&mut self) {
-            let mut proposals = Vec::new();
-            if let Ok(entries) = std::fs::read_dir("/etc/agntos/proposals") {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().map_or(false, |e| e == "json") {
-                        if let Ok(raw) = std::fs::read_to_string(&path) {
-                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                                let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("?");
-                                let summary = v.get("summary").and_then(|s| s.as_str()).unwrap_or("");
-                                let mut m = QVariantMap::default();
-                                m.insert(QString::from("proposalId"), QVariant::from(QString::from(id)));
-                                m.insert(QString::from("summary"), QVariant::from(QString::from(summary)));
-                                m.insert(QString::from("status"), QVariant::from(QString::from("pending")));
-                                proposals.push(QVariant::from(m));
-                            }
-                        }
-                    }
-                }
+            if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
+                conn.send(&ClientMessage::Status { target: "proposals".to_string() }).ok();
+                return;
             }
-            self.proposal_items = proposals.into_iter().collect::<QVariantList>();
+            // Fallback: try to load from session if connected
+            let s = self.session.lock().unwrap();
+            self.proposal_items = make_proposal_list(&s.proposals);
             self.proposalsChanged();
         }
     ),
 
     pub refresh_status: qt_method!(
         pub fn refresh_status(&mut self) {
-            let mut conn = match Connection::connect(&self.socket_path) {
-                Ok(c) => c,
-                Err(_) => return,
-            };
-            conn.handshake(None).ok();
-            let msg = ClientMessage::Status { target: "system".to_string() };
-            conn.send(&msg).ok();
-            if let Ok(ServerMessage::StatusResponse { data, .. }) = conn.recv() {
-                let output = data.get("output").and_then(|v| v.as_str()).unwrap_or("");
-                for line in output.lines() {
-                    let lower = line.to_lowercase();
-                    if lower.contains("cpu") { self.cpu_info = QString::from(line); }
-                    else if lower.contains("ram") || lower.contains("memory") { self.ram_used = QString::from(line); }
-                    else if lower.contains("disk") { self.disk_used = QString::from(line); }
-                }
-                self.statusChanged();
+            if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
+                conn.send(&ClientMessage::Status { target: "system".to_string() }).ok();
+            } else {
+                let mut conn = match Connection::connect(&self.socket_path) {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+                conn.handshake(None).ok();
+                conn.send(&ClientMessage::Status { target: "system".to_string() }).ok();
             }
         }
     ),
@@ -334,17 +315,19 @@ pub struct AppBridge {
 
     pub load_audit: qt_method!(
         pub fn load_audit(&mut self, limit: i32) {
-            let mut conn = match Connection::connect(&self.socket_path) {
-                Ok(c) => c,
-                Err(_) => return,
-            };
-            conn.handshake(None).ok();
-            conn.send(&ClientMessage::Audit {
-                action: AuditRequestAction::List, query: None, id: None, limit: limit as u32,
-            }).ok();
-            if let Ok(ServerMessage::AuditResponse { entries }) = conn.recv() {
-                self.audit_items = make_audit_list(&entries);
-                self.auditChanged();
+            if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
+                conn.send(&ClientMessage::Audit {
+                    action: AuditRequestAction::List, query: None, id: None, limit: limit as u32,
+                }).ok();
+            } else {
+                let mut conn = match Connection::connect(&self.socket_path) {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+                conn.handshake(None).ok();
+                conn.send(&ClientMessage::Audit {
+                    action: AuditRequestAction::List, query: None, id: None, limit: limit as u32,
+                }).ok();
             }
         }
     ),
@@ -368,33 +351,29 @@ pub struct AppBridge {
                 self.processingChanged();
             }
 
-            if self.pending_updates.swap(false, Ordering::SeqCst) {
-                let entries = self.chat_entries.lock().unwrap();
-                eprintln!("[bridge] poll_updates: {} entries", entries.len());
-                for (i, e) in entries.iter().enumerate() {
-                    let et = e.get("entryType").and_then(|v| v.as_str()).unwrap_or("?");
-                    let c = e.get("content").and_then(|v| v.as_str()).unwrap_or("").chars().take(60).collect::<String>();
-                    eprintln!("[bridge]   [{}] type={} c={}", i, et, c);
-                }
-                let chat_entries: Vec<ChatEntry> = entries.iter().map(json_to_chat_entry).collect();
-                self.chat_model.borrow_mut().reset_data(chat_entries);
+            let current_change = self.session_change.load(Ordering::SeqCst);
+            if current_change != self.last_seen_change {
+                self.last_seen_change = current_change;
+                self.sync_from_session();
             }
         }
     ),
 
     pub search_audit: qt_method!(
         pub fn search_audit(&mut self, query: QString) {
-            let mut conn = match Connection::connect(&self.socket_path) {
-                Ok(c) => c,
-                Err(_) => return,
-            };
-            conn.handshake(None).ok();
-            conn.send(&ClientMessage::Audit {
-                action: AuditRequestAction::Search, query: Some(query.to_string()), id: None, limit: 50,
-            }).ok();
-            if let Ok(ServerMessage::AuditResponse { entries }) = conn.recv() {
-                self.audit_items = make_audit_list(&entries);
-                self.auditChanged();
+            if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
+                conn.send(&ClientMessage::Audit {
+                    action: AuditRequestAction::Search, query: Some(query.to_string()), id: None, limit: 50,
+                }).ok();
+            } else {
+                let mut conn = match Connection::connect(&self.socket_path) {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+                conn.handshake(None).ok();
+                conn.send(&ClientMessage::Audit {
+                    action: AuditRequestAction::Search, query: Some(query.to_string()), id: None, limit: 50,
+                }).ok();
             }
         }
     ),
@@ -409,84 +388,63 @@ impl AppBridge {
         bridge
     }
 
+    fn sync_from_session(&mut self) {
+        let s = self.session.lock().unwrap();
+
+        self.turn_state = QString::from(s.turn_state.to_string().as_str());
+
+        let conn_state = match s.connection_state {
+            ConnectionState::Connected => "connected",
+            ConnectionState::Connecting => "connecting",
+            ConnectionState::Disconnected => "disconnected",
+        };
+        self.connection_state = QString::from(conn_state);
+        self.connected = matches!(s.connection_state, ConnectionState::Connected);
+        self.profile_name = QString::from(s.profile.as_str());
+        self.model_name = QString::from(s.model.as_str());
+
+        self.cpu_info = QString::from(s.status.cpu_info.as_str());
+        self.ram_used = QString::from(s.status.ram_used.as_str());
+        self.disk_used = QString::from(s.status.disk_used.as_str());
+        self.failed_units = s.status.failed_units as i32;
+        self.watchdog_alert_count = s.status.watchdog_alert_count as i32;
+        self.last_check_time = QString::from(s.status.last_check_time.as_str());
+
+        let chat_entries: Vec<ChatEntry> = s.chat.entries.iter().map(to_qml_chat_entry).collect();
+        self.chat_model.borrow_mut().reset_data(chat_entries);
+
+        self.proposal_items = make_proposal_list(&s.proposals);
+        self.audit_items = make_audit_list(&s.audit);
+
+        drop(s);
+        self.stateChanged();
+        self.statusChanged();
+        self.proposalsChanged();
+        self.auditChanged();
+    }
+
     fn read_chat_responses_thread(
         conn: &mut Connection,
-        entries: &Arc<Mutex<Vec<serde_json::Value>>>,
-        pending: &Arc<AtomicBool>,
+        session: &Arc<Mutex<AppSession>>,
+        change_cnt: &Arc<AtomicU64>,
         is_proc: &Arc<AtomicBool>,
     ) {
         eprintln!("[bridge] read_chat_responses_thread started");
-        let mut had_tokens = false;
         loop {
             let r = conn.recv();
-            let mut lock = entries.lock().unwrap();
             match r {
-                Ok(ServerMessage::Token { content }) => {
-                    had_tokens = true;
-                    let can_append = lock.last().map_or(false, |last| {
-                        last.get("entryType").and_then(|v| v.as_str()) == Some("assistant")
-                    });
-                    if can_append {
-                        if let Some(last) = lock.last_mut() {
-                            if let Some(obj) = last.as_object_mut() {
-                                let existing = obj.get("content").and_then(|v| v.as_str()).unwrap_or_default();
-                                obj.insert("content".into(), serde_json::Value::String(format!("{}{}", existing, content)));
-                            }
-                        }
-                    } else {
-                        lock.push(make_entry("assistant", &[("content", &content)]));
-                    }
-                    pending.store(true, Ordering::SeqCst);
-                }
-                Ok(ServerMessage::ToolCall { id, name, args, status }) => {
-                    let s = match status { ToolCallStatus::Running => "running", ToolCallStatus::Done => "done" };
-                    let args_str = serde_json::to_string(&args).unwrap_or_default();
-                    eprintln!("[bridge] ToolCall: id={}, name={}", id, name);
-                    lock.push(make_tool_call_entry(&id, &name, &args_str, s));
-                    pending.store(true, Ordering::SeqCst);
-                }
-                Ok(ServerMessage::ToolResult { output, success, .. }) => {
-                    eprintln!("[bridge] ToolResult: success={}", success);
-                    if let Some(last) = lock.last_mut() {
-                        if let Some(obj) = last.as_object_mut() {
-                            obj.insert("entryType".into(), serde_json::Value::String("tool_result".into()));
-                            obj.insert("content".into(), serde_json::Value::String(output));
-                            obj.insert("toolSuccess".into(), serde_json::Value::Bool(success));
-                            obj.insert("toolStatus".into(), serde_json::Value::String("done".into()));
-                            pending.store(true, Ordering::SeqCst);
-                        }
+                Ok(msg) => {
+                    let mut s = session.lock().unwrap();
+                    s.handle_server_message(&msg);
+                    change_cnt.fetch_add(1, Ordering::SeqCst);
+                    if matches!(msg, ServerMessage::TurnComplete { .. } | ServerMessage::Error { .. }) {
+                        drop(s);
+                        is_proc.store(false, Ordering::SeqCst);
+                        break;
                     }
                 }
-                Ok(ServerMessage::ApprovalRequest { proposal_id, summary, .. }) => {
-                    eprintln!("[bridge] ApprovalRequest: id={}, summary={}", proposal_id, summary);
-                    lock.push(make_approval_entry(&proposal_id, &summary));
-                    pending.store(true, Ordering::SeqCst);
-                }
-                Ok(ServerMessage::TurnComplete { content }) => {
-                    eprintln!("[bridge] TurnComplete: len={}", content.len());
-                    if !content.is_empty() && content != "(cancelled)" && !had_tokens {
-                        lock.push(make_entry("assistant", &[("content", &content)]));
-                        pending.store(true, Ordering::SeqCst);
-                    } else if !content.is_empty() && content != "(cancelled)" && had_tokens {
-                        // Content already built via streamed tokens; just signal update
-                        pending.store(true, Ordering::SeqCst);
-                    }
-                    drop(lock);
-                    is_proc.store(false, Ordering::SeqCst);
-                    break;
-                }
-                Ok(ServerMessage::Error { message }) => {
-                    eprintln!("[bridge] Error: {}", message);
-                    lock.push(make_entry("assistant", &[("content", &format!("Error: {}", message))]));
-                    pending.store(true, Ordering::SeqCst);
-                    drop(lock);
-                    is_proc.store(false, Ordering::SeqCst);
-                    break;
-                }
-                Ok(_) => {}
                 Err(_) => {
                     eprintln!("[bridge] Connection closed");
-                    drop(lock);
                     is_proc.store(false, Ordering::SeqCst);
                     break;
                 }
