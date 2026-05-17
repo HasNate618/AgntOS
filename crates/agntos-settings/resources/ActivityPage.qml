@@ -6,7 +6,15 @@ Page {
     id: root
     title: "Activity"
 
-    property string searchQuery: ""
+    property string lastQuery: ""
+
+    Component.onCompleted: appBridge.load_audit(50)
+
+    onVisibleChanged: {
+        if (visible && lastQuery.length === 0) {
+            appBridge.load_audit(50)
+        }
+    }
 
     Connections {
         target: appBridge
@@ -25,14 +33,15 @@ Page {
             TextField {
                 id: searchField
                 Layout.fillWidth: true
-                placeholderText: "Search audit log..."
+                Layout.preferredHeight: 36
+                placeholderText: "Search audit log…"
                 onAccepted: {
-                    searchQuery = text
+                    lastQuery = text
                     appBridge.search_audit(text)
                 }
                 onTextChanged: {
-                    if (text.length === 0 && searchQuery.length > 0) {
-                        searchQuery = ""
+                    if (text.length === 0 && lastQuery.length > 0) {
+                        lastQuery = ""
                         appBridge.load_audit(50)
                     }
                 }
@@ -40,9 +49,10 @@ Page {
 
             Button {
                 text: "↻ Refresh"
+                implicitHeight: 36
                 onClicked: {
                     searchField.text = ""
-                    searchQuery = ""
+                    lastQuery = ""
                     appBridge.load_audit(50)
                 }
             }
@@ -56,21 +66,28 @@ Page {
             ListView {
                 id: auditList
                 model: appBridge.audit_items
-                spacing: 8
+                spacing: 6
 
                 delegate: Pane {
                     width: auditList.width
-                    padding: 12
+                    padding: 10
 
                     ColumnLayout {
                         spacing: 4
 
                         RowLayout {
                             Layout.fillWidth: true
+                            spacing: 8
 
                             Rectangle {
                                 width: 10; height: 10; radius: 5
-                                color: entryStatus === "Success" ? "#4caf50" : (entryStatus === "Failed" ? "#f44336" : "#ff9800")
+                                color: {
+                                    var s = (status || "").toString().toLowerCase()
+                                    if (s === "success") return "#4caf50"
+                                    if (s === "error" || s === "failed") return "#f44336"
+                                    if (s === "pending") return "#ff9800"
+                                    return "#9e9e9e"
+                                }
                             }
 
                             Label {
@@ -99,16 +116,28 @@ Page {
                             }
 
                             Label {
-                                text: auditId || ""
+                                text: {
+                                    var id = auditId || ""
+                                    return id.length > 8 ? id.substring(0, 8) + "…" : id
+                                }
                                 font.family: "monospace"
                                 font.pointSize: 8
                                 color: "#888888"
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Label {
+                                text: actor || ""
+                                font.pointSize: 9
+                                color: "#aaaaaa"
+                                visible: (actor || "").length > 0
                             }
                         }
 
                         Rectangle {
                             Layout.fillWidth: true
-                            visible: expandBtn.checked && prompt !== undefined && prompt.length > 0
+                            visible: expandBtn.checked && prompt !== undefined && (prompt || "").length > 0
                             color: "#f5f5f5"
                             radius: 4
                             border.color: "#cccccc"
@@ -133,7 +162,7 @@ Page {
                             checkable: true
                             flat: true
                             Layout.fillWidth: true
-                            visible: prompt !== undefined && prompt.length > 0
+                            visible: prompt !== undefined && (prompt || "").length > 0
                         }
                     }
                 }
