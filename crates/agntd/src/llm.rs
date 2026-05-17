@@ -13,6 +13,7 @@
 
 use agnt_common::memory::{CoreMemory, MemoryFile};
 use agnt_common::models::{ModelProfile, ModelsConfig};
+use agnt_common::wire::ServerMessage;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -192,7 +193,98 @@ impl LlmClient {
         } else {
             json!({
                 "role": "assistant",
-                "content": if content.is_empty() { Value::Null } else { Value::String(content.clone()) },
+                "content": Value::Null,
+                "tool_calls": raw_tool_calls,
+            })
+        };
+
+        Ok(AssistantResponse {
+            assistant_message,
+            content,
+            tool_calls,
+        })
+    }
+
+    /// Streaming completion that writes batched token messages to a writer
+    /// (e.g., a Unix socket) instead of stdout. Used by the GUI persistent session.
+    pub async fn complete_streaming_to_writer<W: std::io::Write + Send>(
+        &self,
+        messages: &[Value],
+        tools: &[Value],
+        writer: &mut W,
+    ) -> Result<AssistantResponse, String> {
+        use futures_util::StreamExt;
+
+        let endpoint = normalize_endpoint(&self.profile.endpoint);
+        let payload = completion_payload(&self.profile, messages, tools, true);
+
+        let mut req = self
+            .http
+            .post(&endpoint)
+            .header(CONTENT_TYPE, "application/json")
+            .json(&payload);
+
+        if let Some(env_name) = &self.profile.api_key_env {
+            if let Ok(key) = std::env::var(env_name) {
+                if !key.trim().is_empty() {
+                    req = req.header(AUTHORIZATION, format!("Bearer {}", key));
+                }
+            }
+        }
+
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("LLM request failed: {}", e))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("LLM returned {}: {}", status, body));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut content = String::new();
+        let mut tool_call_buf: Vec<StreamToolCall> = Vec::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| format!("Stream read error: {}", e))?;
+            let text = String::from_utf8_lossy(&chunk);
+
+            for line in text.lines() {
+                let data = match line.strip_prefix("data: ") {
+                    Some(d) => d,
+                    _ => continue,
+                };
+                if data == "[DONE]" {
+                    continue;
+                }
+                let parsed: StreamChunk = match serde_json::from_str(data) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                if let Some(choice) = parsed.choices.into_iter().next() {
+                    if let Some(c) = choice.delta.content {
+                        content.push_str(&c);
+                        let token_msg = ServerMessage::Token { content: c };
+                        if let Ok(json) = serde_json::to_string(&token_msg) {
+                            let _ = writeln!(writer, "{}", json);
+                        }
+                    }
+                    for tc in choice.delta.tool_calls.unwrap_or_default() {
+                        merge_stream_tool_call(&mut tool_call_buf, tc);
+                    }
+                }
+            }
+        }
+
+        let (tool_calls, raw_tool_calls) = finalize_stream_tool_calls(&tool_call_buf);
+
+        let assistant_message = if raw_tool_calls.is_empty() {
+            json!({ "role": "assistant", "content": content })
+        } else {
+            json!({
+                "role": "assistant",
+                "content": Value::Null,
                 "tool_calls": raw_tool_calls,
             })
         };
@@ -554,7 +646,7 @@ fn parse_completion_response(body: &str) -> Result<AssistantResponse, String> {
     } else {
         json!({
             "role": "assistant",
-            "content": if content.is_empty() { Value::Null } else { Value::String(content.clone()) },
+            "content": Value::Null,
             "tool_calls": raw_tool_calls,
         })
     };

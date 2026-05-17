@@ -78,6 +78,18 @@ impl Connection {
         self.recv()
     }
 
+    pub fn try_clone(&self) -> Result<Self, std::io::Error> {
+        let stream_clone = self.stream.try_clone()?;
+        let reader_stream = self.reader.get_ref().try_clone()?;
+        let reader = BufReader::new(reader_stream);
+        Ok(Self {
+            stream: stream_clone,
+            reader,
+            socket_path: self.socket_path.clone(),
+            backoff_secs: self.backoff_secs,
+        })
+    }
+
     pub fn socket_path(&self) -> &str {
         &self.socket_path
     }

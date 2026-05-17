@@ -328,7 +328,9 @@ fn handle_persistent_session(
                     let mut depth = 0;
                     while depth < 8 {
                         depth += 1;
-                        let resp = match runtime.block_on(client.complete(&messages, &tools)) {
+                        let resp = match runtime.block_on(
+                            client.complete_streaming_to_writer(&messages, &tools, &mut writer_clone)
+                        ) {
                             Ok(r) => r,
                             Err(e) => {
                                 let err_msg = ServerMessage::Error {
@@ -368,6 +370,25 @@ fn handle_persistent_session(
                                 "{}",
                                 serde_json::to_string(&tc_msg).unwrap()
                             );
+
+                            if tc.name == "apply" || tc.name == "rollback" {
+                                let pid = tc.arguments
+                                    .get("proposal_id").and_then(|v| v.as_str());
+                                let summary = pid.map_or_else(
+                                    || "Roll back NixOS generation".to_string(),
+                                    |id| format!("Apply proposal {}", id),
+                                );
+                                let approval_msg = ServerMessage::ApprovalRequest {
+                                    proposal_id: pid.unwrap_or("rollback").to_string(),
+                                    summary,
+                                    tool_call_id: tc.id.clone(),
+                                };
+                                let _ = writeln!(
+                                    &mut writer_clone,
+                                    "{}",
+                                    serde_json::to_string(&approval_msg).unwrap()
+                                );
+                            }
 
                             let result = execute_tool_call_gui(tc, Some(&prompt), gate.clone());
 

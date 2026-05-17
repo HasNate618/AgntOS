@@ -5,10 +5,7 @@ import QtQuick.Layouts 1.15
 Page {
     id: root
 
-    Connections {
-        target: appBridge
-        onChatChanged: chatList.positionViewAtEnd()
-    }
+    SystemPalette { id: palette; colorGroup: SystemPalette.Active }
 
     ColumnLayout {
         anchors.fill: parent
@@ -21,9 +18,13 @@ Page {
 
             ListView {
                 id: chatList
-                model: appBridge.chat_items
+                model: appBridge.chat_model
                 spacing: 8
-                verticalLayoutDirection: ListView.BottomToTop
+                verticalLayoutDirection: ListView.TopToBottom
+
+                onCountChanged: {
+                    chatList.positionViewAtEnd()
+                }
 
                 delegate: Item {
                     width: chatList.width
@@ -31,20 +32,20 @@ Page {
 
                     Rectangle {
                         id: chatBubble
-                        anchors { left: entryType === "user" ? undefined : parent.left; right: entryType === "user" ? parent.right : undefined }
-                        anchors.leftMargin: entryType === "user" ? 48 : 8
-                        anchors.rightMargin: entryType === "user" ? 8 : 48
+                        anchors { left: String(entryType) === "user" ? undefined : parent.left; right: String(entryType) === "user" ? parent.right : undefined }
+                        anchors.leftMargin: String(entryType) === "user" ? 48 : 8
+                        anchors.rightMargin: String(entryType) === "user" ? 8 : 48
                         width: Math.min(contentColumn.implicitWidth + 16, parent.width * 0.75)
                         height: contentColumn.implicitHeight + 16
                         radius: 8
                         color: {
-                            if (entryType === "user") return "#3daee9"
-                            if (entryType === "approval") return "#fff3cd"
-                            if (entryType === "tool_call" || entryType === "tool_result") return "#f5f5f5"
-                            return "#ffffff"
+                            if (String(entryType) === "user") return palette.highlight
+                            if (String(entryType) === "approval") return "#fff3cd"
+                            if (String(entryType) === "tool_call" || String(entryType) === "tool_result") return palette.alternateBase
+                            return palette.base
                         }
-                        border.width: entryType === "assistant" ? 1 : 0
-                        border.color: "#cccccc"
+                        border.width: String(entryType) === "assistant" ? 1 : 0
+                        border.color: palette.mid
 
                         ColumnLayout {
                             id: contentColumn
@@ -55,17 +56,17 @@ Page {
                             Text {
                                 Layout.fillWidth: true
                                 text: {
-                                    if (entryType === "tool_call") return "🔧 " + (toolName || "") + "..."
-                                    if (entryType === "tool_result") return "✓ " + (toolName || "") + " completed"
-                                    if (entryType === "approval") return "⚠️ Apply " + (proposalId || "") + "?"
+                                    if (String(entryType) === "tool_call") return "🔧 " + (toolName || "") + "..."
+                                    if (String(entryType) === "tool_result") return "✓ " + (toolName || "") + " completed"
+                                    if (String(entryType) === "approval") return "⚠️ Apply " + (proposalId || "") + "?"
                                     return content || ""
                                 }
                                 wrapMode: Text.Wrap
-                                color: entryType === "user" ? "#ffffff" : "#000000"
+                                color: String(entryType) === "user" ? palette.highlightedText : palette.text
                             }
 
                             Text {
-                                visible: entryType === "approval"
+                                visible: String(entryType) === "approval"
                                 text: proposalSummary || ""
                                 wrapMode: Text.Wrap
                                 color: "#856404"
@@ -73,7 +74,7 @@ Page {
                             }
 
                             RowLayout {
-                                visible: entryType === "approval"
+                                visible: String(entryType) === "approval"
                                 Layout.fillWidth: true
                                 spacing: 8
 
@@ -105,7 +106,7 @@ Page {
                 id: inputField
                 Layout.fillWidth: true
                 placeholderText: appBridge.is_processing ? "Waiting for agent..." : "Ask the agent..."
-                enabled: !appBridge.is_processing
+                enabled: true
                 onAccepted: sendChat()
             }
 

@@ -31,19 +31,19 @@ ApplicationWindow {
     }
 
     footer: ToolBar {
-        visible: true
+        visible: !appBridge.connected
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 8
 
             Rectangle {
                 width: 10; height: 10; radius: 5
-                color: appBridge.connected ? "#4caf50" : "#f44336"
+                color: "#f44336"
             }
 
             Label {
-                text: appBridge.connected ? "Connected" : "Disconnected"
-                color: appBridge.connected ? "#4caf50" : "#f44336"
+                text: "Disconnected"
+                color: "#f44336"
                 font.pointSize: 10
             }
 
@@ -55,7 +55,9 @@ ApplicationWindow {
         anchors.fill: parent
         currentIndex: root.currentPage
 
-        ChatPage { }
+        ChatPage { 
+        id: chatPage
+    }
         StatusPage { }
         ProposalsPage { }
         ActivityPage { }

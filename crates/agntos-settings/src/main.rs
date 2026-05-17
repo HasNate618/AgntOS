@@ -10,7 +10,9 @@ fn main() {
     let mut engine = QmlEngine::new();
 
     let socket_path =
-        std::env::var("AGNTOS_SOCKET").unwrap_or_else(|_| "/run/agntd/agent.sock".to_string());
+        std::env::var("AGNTOS_SOCKET")
+            .or_else(|_| std::env::var("XDG_RUNTIME_DIR").map(|d| format!("{}/agntd.sock", d)))
+            .unwrap_or_else(|_| "/run/agntd/agent.sock".to_string());
 
     let qml_dir = std::env::var("AGNTOS_QML_DIR")
         .unwrap_or_else(|_| "/run/current-system/sw/share/agntos-settings/qml".to_string());
