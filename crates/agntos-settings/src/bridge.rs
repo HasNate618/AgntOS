@@ -86,9 +86,8 @@ fn make_approval_entry(proposal_id: &str, summary: &str) -> serde_json::Value {
     serde_json::Value::Object(obj)
 }
 
-fn entries_to_qvariant(entries: &[serde_json::Value]) -> QVariant {
-    let list: QVariantList = entries.iter().map(|e| json_to_qvm(e)).collect();
-    QVariant::from(list)
+fn entries_to_qvariant(entries: &[serde_json::Value]) -> QVariantList {
+    entries.iter().map(|e| json_to_qvm(e)).collect()
 }
 
 fn make_audit_list(entries: &[serde_json::Value]) -> QVariantList {
@@ -174,7 +173,7 @@ fn make_audit_list(entries: &[serde_json::Value]) -> QVariantList {
 pub struct AppBridge {
     pub base: qt_base_class!(trait QObject),
 
-    pub chat_items: qt_property!(QVariant; NOTIFY chatChanged),
+    pub chat_items: qt_property!(QVariantList; NOTIFY chatChanged),
     pub is_processing: qt_property!(bool; NOTIFY processingChanged),
 
     pub connected: qt_property!(bool; NOTIFY statusChanged),
@@ -190,8 +189,8 @@ pub struct AppBridge {
     pub watchdog_alert_count: qt_property!(i32; NOTIFY statusChanged),
     pub last_check_time: qt_property!(QString; NOTIFY statusChanged),
 
-    pub proposal_items: qt_property!(QVariant; NOTIFY proposalsChanged),
-    pub audit_items: qt_property!(QVariant; NOTIFY auditChanged),
+    pub proposal_items: qt_property!(QVariantList; NOTIFY proposalsChanged),
+    pub audit_items: qt_property!(QVariantList; NOTIFY auditChanged),
 
     pub chatChanged: qt_signal!(),
     pub processingChanged: qt_signal!(),
@@ -206,7 +205,7 @@ pub struct AppBridge {
     pub clear_chat: qt_method!(
         pub fn clear_chat(&mut self) {
             self.chat_entries.lock().unwrap().clear();
-            self.chat_items = QVariant::from(QVariantList::default());
+            self.chat_items = QVariantList::default();
             self.chatChanged();
         }
     ),
@@ -307,7 +306,7 @@ pub struct AppBridge {
                     }
                 }
             }
-            self.proposal_items = QVariant::from(proposals.into_iter().collect::<QVariantList>());
+            self.proposal_items = proposals.into_iter().collect::<QVariantList>();
             self.proposalsChanged();
         }
     ),
@@ -380,7 +379,7 @@ pub struct AppBridge {
                 };
                 conn.send(&msg).ok();
                 if let Ok(ServerMessage::AuditResponse { entries }) = conn.recv() {
-                    self.audit_items = QVariant::from(make_audit_list(&entries));
+                    self.audit_items = make_audit_list(&entries);
                     self.auditChanged();
                 }
             }
@@ -409,7 +408,7 @@ pub struct AppBridge {
                 };
                 conn.send(&msg).ok();
                 if let Ok(ServerMessage::AuditResponse { entries }) = conn.recv() {
-                    self.audit_items = QVariant::from(make_audit_list(&entries));
+                    self.audit_items = make_audit_list(&entries);
                     self.auditChanged();
                 }
             }
@@ -421,9 +420,9 @@ impl AppBridge {
     pub fn new(socket_path: &str) -> Self {
         let mut bridge = AppBridge::default();
         bridge.socket_path = socket_path.to_string();
-        bridge.chat_items = QVariant::from(QVariantList::default());
-        bridge.proposal_items = QVariant::from(QVariantList::default());
-        bridge.audit_items = QVariant::from(QVariantList::default());
+        bridge.chat_items = QVariantList::default();
+        bridge.proposal_items = QVariantList::default();
+        bridge.audit_items = QVariantList::default();
         bridge
     }
 
