@@ -2,7 +2,18 @@
 
 ## Current Phase
 
-Phase 3 v1 (Kirigami Settings GUI) complete. Next: Phase 3.2 (model routing page, memory viewer, cxx-qt bridge) or Track B (secure API key storage).
+**Settings Stabilization (SS track)** — Aligning the agntos-settings GUI with its own Phase 3 spec. Phase 3 v1 is code-complete but the runtime path drifted from the spec: ad hoc `serde_json::Value` state, missing turn lifecycle, broken proposal rendering, refresh crashes. The stabilization track replaces the dual model/bridge split with a single AppSession source of truth, explicit turn state, and proper event routing.
+
+Phase 3.2 (model routing page, memory viewer, cxx-qt bridge) is deferred until stabilization is complete.
+
+### Stabilization Track Status
+
+- SST-01 through SST-04 (foundation): Not started
+- SST-05 through SST-08 (QML migration): Not started
+- SST-09 through SST-10 (event routing, reconnect): Not started
+- SST-11 through SST-12 (testing, validation): Not started
+
+See `.specs/features/settings-stabilization/` for spec, design, and tasks.
 
 ## Completed (Phase 0)
 

@@ -426,6 +426,17 @@ fn handle_persistent_session(
                                     );
                                 }
                             }
+
+                            // Push tool result into conversation history for the next LLM call
+                            let tool_content = match &result {
+                                Ok(output) => output.clone(),
+                                Err(e) => e.clone(),
+                            };
+                            messages.push(serde_json::json!({
+                                "role": "tool",
+                                "tool_call_id": tc.id.clone(),
+                                "content": tool_content,
+                            }));
                         }
                     }
 

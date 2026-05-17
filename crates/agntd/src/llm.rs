@@ -145,6 +145,7 @@ impl LlmClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
+            eprintln!("[llm] REQUEST FAILED ({}): first 200 chars of body: {}", status, &body[..body.len().min(200)]);
             return Err(format!("LLM returned {}: {}", status, body));
         }
 
@@ -193,7 +194,7 @@ impl LlmClient {
         } else {
             json!({
                 "role": "assistant",
-                "content": Value::Null,
+                "content": if content.is_empty() { serde_json::Value::String(String::new()) } else { serde_json::Value::String(content.clone()) },
                 "tool_calls": raw_tool_calls,
             })
         };
@@ -218,6 +219,8 @@ impl LlmClient {
         let endpoint = normalize_endpoint(&self.profile.endpoint);
         let payload = completion_payload(&self.profile, messages, tools, true);
 
+        eprintln!("[llm] streaming request: {} messages, model={}", messages.len(), self.profile.model);
+
         let mut req = self
             .http
             .post(&endpoint)
@@ -239,6 +242,7 @@ impl LlmClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
+            eprintln!("[llm] 400 body: {}", &body[..body.len().min(500)]);
             return Err(format!("LLM returned {}: {}", status, body));
         }
 
@@ -284,7 +288,7 @@ impl LlmClient {
         } else {
             json!({
                 "role": "assistant",
-                "content": Value::Null,
+                "content": if content.is_empty() { serde_json::Value::String(String::new()) } else { serde_json::Value::String(content.clone()) },
                 "tool_calls": raw_tool_calls,
             })
         };
@@ -596,6 +600,7 @@ fn completion_payload(
         "stream": stream,
         "max_tokens": profile.max_tokens,
         "temperature": profile.temperature,
+        "thinking": true,
     })
 }
 
@@ -646,7 +651,7 @@ fn parse_completion_response(body: &str) -> Result<AssistantResponse, String> {
     } else {
         json!({
             "role": "assistant",
-            "content": Value::Null,
+            "content": if content.is_empty() { serde_json::Value::String(String::new()) } else { serde_json::Value::String(content.clone()) },
             "tool_calls": raw_tool_calls,
         })
     };
