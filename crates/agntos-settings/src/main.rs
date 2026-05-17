@@ -21,11 +21,22 @@ fn main() {
     let bridge = AppBridge::new(&socket_path);
     let boxed = QObjectBox::new(bridge);
     let pinned = boxed.pinned();
+
+    // Blocking startup retry: try to connect before showing the window
+    // so the UI starts in "connected" state when agntd is available.
+    // Retries every 500ms for up to 30 seconds.
     {
         let mut b = pinned.borrow_mut();
-        b.connect_to_agent();
+        for _ in 0..60 {
+            b.connect_to_agent();
+            if b.connected {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
         b.refresh_proposals();
     }
+
     engine.set_object_property(QString::from("appBridge"), pinned);
 
     engine.load_file(QString::from(qml_path.as_str()));
