@@ -2,6 +2,7 @@
 mod backend;
 mod bridge;
 mod models;
+mod session;
 
 use bridge::AppBridge;
 use qmetaobject::*;
