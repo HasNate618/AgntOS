@@ -416,11 +416,13 @@ impl AppBridge {
         is_proc: &Arc<AtomicBool>,
     ) {
         eprintln!("[bridge] read_chat_responses_thread started");
+        let mut had_tokens = false;
         loop {
             let r = conn.recv();
             let mut lock = entries.lock().unwrap();
             match r {
                 Ok(ServerMessage::Token { content }) => {
+                    had_tokens = true;
                     let can_append = lock.last().map_or(false, |last| {
                         last.get("entryType").and_then(|v| v.as_str()) == Some("assistant")
                     });
@@ -462,8 +464,11 @@ impl AppBridge {
                 }
                 Ok(ServerMessage::TurnComplete { content }) => {
                     eprintln!("[bridge] TurnComplete: len={}", content.len());
-                    if !content.is_empty() && content != "(cancelled)" {
+                    if !content.is_empty() && content != "(cancelled)" && !had_tokens {
                         lock.push(make_entry("assistant", &[("content", &content)]));
+                        pending.store(true, Ordering::SeqCst);
+                    } else if !content.is_empty() && content != "(cancelled)" && had_tokens {
+                        // Content already built via streamed tokens; just signal update
                         pending.store(true, Ordering::SeqCst);
                     }
                     drop(lock);
