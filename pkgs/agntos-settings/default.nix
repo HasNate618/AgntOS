@@ -18,7 +18,7 @@ rustPlatform.buildRustPackage {
   cargoBuildFlags = [ "-p" "agntos-settings" ];
 
   nativeBuildInputs = [ pkg-config qt6.qtdeclarative qt6.qttools makeWrapper ];
-  buildInputs = [ openssl qt6.qtdeclarative qt6.qtbase ];
+  buildInputs = [ openssl qt6.qtdeclarative qt6.qtbase qt6.qtwayland ];
 
   cargoLock = {
     lockFile = ../../Cargo.lock;
@@ -33,7 +33,14 @@ rustPlatform.buildRustPackage {
 
     wrapProgram $out/bin/agntos-settings \
       --set AGNTOS_QML_DIR "$qmlDir" \
-      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ qt6.qtbase qt6.qtdeclarative ]}"
+      --set QT_QPA_PLATFORM "wayland" \
+      --set QT_QUICK_BACKEND "software" \
+      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ qt6.qtbase qt6.qtdeclarative qt6.qtwayland ]}" \
+      --prefix QT_PLUGIN_PATH : "${lib.concatStringsSep ":" [
+        "${lib.getLib qt6.qtbase}/lib/qt-6/plugins"
+        "${lib.getLib qt6.qtwayland}/lib/qt-6/plugins"
+      ]}" \
+      --prefix QML2_IMPORT_PATH : "${lib.getLib qt6.qtdeclarative}/lib/qt-6/qml"
 
     mkdir -p $out/share/applications
     cat > $out/share/applications/agntos-settings.desktop << 'DESKTOP'
