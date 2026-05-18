@@ -48,13 +48,19 @@ Page {
                             return ts.indexOf("thinking") >= 0 || ts.indexOf("tool_running") >= 0 || ts.indexOf("awaiting_approval") >= 0
                         }
                         loops: Animation.Infinite
-                        PropertyAnimation { to: "#ffffff"; duration: 600 }
-                        PropertyAnimation { to: {
-                            var ts = String(appBridge.turn_state)
-                            if (ts.indexOf("thinking") >= 0) return "#f57c00"
-                            if (ts.indexOf("awaiting_approval") >= 0) return "#ff9800"
-                            return "#2196f3"
-                        }; duration: 600 }
+                        PropertyAnimation {
+                            to: "#ffffff"
+                            duration: 600
+                        }
+                        PropertyAnimation {
+                            to: {
+                                var ts = String(appBridge.turn_state)
+                                if (ts.indexOf("thinking") >= 0) return "#f57c00"
+                                if (ts.indexOf("awaiting_approval") >= 0) return "#ff9800"
+                                return "#2196f3"
+                            }
+                            duration: 600
+                        }
                     }
                 }
 
@@ -140,8 +146,10 @@ Page {
                                 visible: String(entryType) === "usermessage" || String(entryType) === "assistanttext"
                                 Layout.fillWidth: true
                                 text: content || ""
+                                textFormat: Text.MarkdownText
                                 wrapMode: Text.Wrap
                                 color: String(entryType) === "usermessage" ? palette.highlightedText : palette.text
+                                onLinkActivated: Qt.openUrlExternally(link)
                             }
 
                             // Tool call (running)
@@ -189,11 +197,13 @@ Page {
                                 Text {
                                     Layout.fillWidth: true
                                     text: content || ""
+                                    textFormat: Text.MarkdownText
                                     wrapMode: Text.Wrap
                                     color: palette.text
                                     font.pointSize: 9
                                     maximumLineCount: 3
                                     elide: Text.ElideRight
+                                    onLinkActivated: Qt.openUrlExternally(link)
                                 }
                             }
 

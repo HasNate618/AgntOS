@@ -34,7 +34,6 @@ rustPlatform.buildRustPackage {
     wrapProgram $out/bin/agntos-settings \
       --set AGNTOS_QML_DIR "$qmlDir" \
       --set QT_QPA_PLATFORM "wayland" \
-      --set QT_QUICK_BACKEND "software" \
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ qt6.qtbase qt6.qtdeclarative qt6.qtwayland ]}" \
       --prefix QT_PLUGIN_PATH : "${lib.concatStringsSep ":" [
         "${lib.getLib qt6.qtbase}/lib/qt-6/plugins"

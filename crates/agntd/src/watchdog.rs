@@ -61,12 +61,10 @@ static CHECKS: &[Check] = &[
             let mut logs = String::new();
             for unit in units.iter().take(5) {
                 let cmd = format!(
-                    "journalctl -u {} -n 50 --no-pager 2>/dev/null || true",
+                    "journalctl -u '{}' -n 50 --no-pager 2>/dev/null || true",
                     unit
                 );
-                if let Ok((out, _, _)) =
-                    util::run_agntctl(&["bash", &cmd, "--config-dir", "/etc/agntos"])
-                {
+                if let Ok(out) = run_bash(&cmd) {
                     logs.push_str(&format!("=== {} ===\n{}\n", unit, out));
                 }
             }
@@ -88,7 +86,7 @@ static CHECKS: &[Check] = &[
     },
     Check {
         name: "oom_killer",
-        command: "dmesg 2>/dev/null | grep -i oom || true",
+        command: "dmesg 2>/dev/null | grep -i 'oom-killer:' || true",
         tripped_if: |output| !output.trim().is_empty(),
         fetch_logs: |stdout| {
             let lines: Vec<&str> = stdout.lines().rev().take(10).collect();
@@ -154,10 +152,10 @@ fn load_config(config_dir: &str) -> WatchdogConfig {
 
 async fn run_cycle(client: &LlmClient, config_dir: &str) -> Result<(), String> {
     for check in CHECKS {
-        let result = util::run_agntctl(&["bash", check.command, "--config-dir", config_dir]);
+        let result = run_bash(check.command);
 
         let stdout = match result {
-            Ok((out, _, _)) => out,
+            Ok(out) => out,
             Err(e) => {
                 eprintln!("[watchdog] check '{}' command failed: {}", check.name, e);
                 continue;
@@ -177,6 +175,20 @@ async fn run_cycle(client: &LlmClient, config_dir: &str) -> Result<(), String> {
         triage(client, config_dir, check, &stdout, &logs).await;
     }
     Ok(())
+}
+
+fn run_bash(command: &str) -> Result<String, String> {
+    let output = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .map_err(|e| format!("Failed to run bash: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        eprintln!("[watchdog] bash stderr: {}", stderr);
+    }
+    Ok(stdout)
 }
 
 async fn triage(

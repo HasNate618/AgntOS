@@ -253,6 +253,10 @@ enum Command {
         /// Config directory (default: /etc/agntos)
         #[arg(long)]
         config_dir: Option<PathBuf>,
+
+        /// Skip audit logging
+        #[arg(long)]
+        no_audit: bool,
     },
 }
 
@@ -643,7 +647,8 @@ fn main() {
         Command::Bash {
             command,
             config_dir,
-        } => match sys::execute_bash(&command, config_dir.as_ref()) {
+            no_audit,
+        } => match sys::execute_bash(&command, config_dir.as_ref(), no_audit) {
             Ok(out) => print!("{}", out),
             Err(e) => {
                 eprintln!("Error: {}", e);

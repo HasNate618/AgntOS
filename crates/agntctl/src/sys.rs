@@ -51,9 +51,13 @@ pub fn execute_edit(
     ))
 }
 
-/// Runs `bash -c <command>`, captures stdout and stderr, and logs the
-/// execution to the audit log.
-pub fn execute_bash(command: &str, config_dir: Option<&PathBuf>) -> Result<String, String> {
+/// Runs `bash -c <command>`, captures stdout and stderr, and optionally logs
+/// the execution to the audit log.
+pub fn execute_bash(
+    command: &str,
+    config_dir: Option<&PathBuf>,
+    no_audit: bool,
+) -> Result<String, String> {
     let output = std::process::Command::new("bash")
         .arg("-c")
         .arg(command)
@@ -64,7 +68,9 @@ pub fn execute_bash(command: &str, config_dir: Option<&PathBuf>) -> Result<Strin
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let exit_code = output.status.code().unwrap_or(-1);
 
-    crate::audit::log_bash(command, exit_code, &stdout, &stderr, config_dir);
+    if !no_audit {
+        crate::audit::log_bash(command, exit_code, &stdout, &stderr, config_dir);
+    }
 
     let mut result = String::new();
     if !stdout.is_empty() {
@@ -168,13 +174,13 @@ mod tests {
 
     #[test]
     fn test_bash_echo() {
-        let result = execute_bash("echo hello", None).unwrap();
+        let result = execute_bash("echo hello", None, false).unwrap();
         assert!(result.contains("hello"));
     }
 
     #[test]
     fn test_bash_failure() {
-        let result = execute_bash("exit 1", None);
+        let result = execute_bash("exit 1", None, false);
         assert!(result.is_err());
     }
 }
