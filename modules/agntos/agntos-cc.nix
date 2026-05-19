@@ -17,16 +17,10 @@ in {
     environment.systemPackages = with pkgs; [
       cfg.package
       agntctl
+      nodejs
     ];
 
     environment.etc."agntos/AGENTS.md".source = "${cfg.package}/share/agntos/AGENTS.md";
     environment.etc."agntos/extensions/agntos-tools".source = "${cfg.package}/share/agntos/extensions/agntos-tools";
-
-    # Ensure node is available for pi CLI
-    environment.systemPackages = with pkgs; [
-      cfg.package
-      agntctl
-      nodejs
-    ];
   };
 }
