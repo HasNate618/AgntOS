@@ -66,8 +66,9 @@
     {#each pages as page}
       <button
         class={currentPage === page.id ? "active" : ""}
+        class:active-icon={currentPage === page.id}
         onclick={() => (currentPage = page.id)}
-        title={page.label}
+        data-label={page.label}
       >
         {page.icon}
       </button>

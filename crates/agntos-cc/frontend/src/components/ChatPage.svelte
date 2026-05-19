@@ -175,53 +175,71 @@
     flex: 1;
     overflow: hidden;
   }
+
   .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: 20px 24px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
+
   .input-area {
     display: flex;
-    padding: 12px 16px;
+    padding: 16px 20px 20px;
     border-top: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    gap: 8px;
+    background: var(--bg-primary);
+    gap: 12px;
+    align-items: flex-end;
   }
+
   .input-area textarea {
     flex: 1;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--text-primary);
-    padding: 8px 12px;
-    font-size: 14px;
+    padding: 14px 16px;
+    font-size: 16px;
     resize: none;
-    min-height: 40px;
-    max-height: 120px;
+    min-height: 52px;
+    max-height: 150px;
     font-family: inherit;
-  }
-  .input-area textarea:focus {
+    line-height: 1.5;
     outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .input-area textarea:focus {
     border-color: var(--accent);
   }
+
+  .input-area textarea::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+  }
+
   .input-area button {
     background: var(--accent);
     color: white;
     border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
+    border-radius: 10px;
+    padding: 14px 24px;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    white-space: nowrap;
   }
+
   .input-area button:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
   }
+
   .input-area button:hover:not(:disabled) {
     background: var(--accent-hover);
+    transform: translateY(-1px);
   }
 </style>
