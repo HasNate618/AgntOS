@@ -16,31 +16,40 @@
     { id: "activity", icon: "📜", label: "Activity" },
   ];
 
-  onMount(() => {
+  onMount(async () => {
+    // Poll for manual bridge status (set via eval from Rust)
+    for (let i = 0; i < 30; i++) {
+      const s = window.__AGNTOS_BRIDGE_STATUS__;
+      if (s && s.connected) {
+        connection.update((c) => ({ ...c, connected: true, state: s.state || "idle" }));
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
     const { listen } = window.__TAURI__.event;
+    const { invoke } = window.__TAURI__.core;
 
     listen("agent:connected", () => {
       connection.update((c) => ({ ...c, connected: true }));
-      // Request current state to get model info
-      const { invoke } = window.__TAURI__.core;
       invoke("get_connection_status").then((status) => {
         if (status.model) {
           connection.update((c) => ({ ...c, model: status.model }));
         }
       }).catch(() => {});
-    });
+    }).catch((e) => console.error("listen agent:connected failed", e));
 
     listen("agent:disconnected", () => {
       connection.update((c) => ({ ...c, connected: false, state: "disconnected" }));
-    });
+    }).catch((e) => console.error("listen agent:disconnected failed", e));
 
     listen("agent:start", () => {
       connection.update((c) => ({ ...c, state: "thinking" }));
-    });
+    }).catch((e) => console.error("listen agent:start failed", e));
 
     listen("agent:end", () => {
       connection.update((c) => ({ ...c, state: "idle" }));
-    });
+    }).catch((e) => console.error("listen agent:end failed", e));
 
     listen("agent:rpc-response", (event) => {
       const data = JSON.parse(event.payload);
@@ -48,7 +57,7 @@
         const model = data.data.model;
         connection.update((c) => ({ ...c, model: model.name || model.id }));
       }
-    });
+    }).catch((e) => console.error("listen agent:rpc-response failed", e));
   });
 </script>
 

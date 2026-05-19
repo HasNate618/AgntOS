@@ -23,6 +23,7 @@ pub struct AppConfig {
     pub model_config_path: PathBuf,
     pub agntctl_path: String,
     pub default_model: Option<String>,
+    pub llm_base_url: String,
     pub host: String,
     pub port: u16,
 }
@@ -38,6 +39,7 @@ impl Default for AppConfig {
             model_config_path: base.join("models.toml"),
             agntctl_path: "agntctl".into(),
             default_model: None,
+            llm_base_url: String::new(),
             host: "0.0.0.0".into(),
             port: 8080,
         }
@@ -66,11 +68,14 @@ impl AppConfig {
                 if let Some(ext) = agntos.get("extension").and_then(|v| v.as_str()) {
                     config.extension_path = PathBuf::from(ext);
                 }
+                if let Some(model) = agntos.get("default_model").and_then(|v| v.as_str()) {
+                    config.default_model = Some(model.into());
+                }
+                if let Some(url) = agntos.get("llm_base_url").and_then(|v| v.as_str()) {
+                    config.llm_base_url = url.into();
+                }
             }
 
-            if let Some(default) = parsed.get("default_model").and_then(|v| v.as_str()) {
-                config.default_model = Some(default.into());
-            }
             if let Some(host) = parsed.get("host").and_then(|v| v.as_str()) {
                 config.host = host.into();
             }

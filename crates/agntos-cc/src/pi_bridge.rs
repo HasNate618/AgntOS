@@ -1,9 +1,18 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::process::{Child, ChildStdin, ChildStdout};
 use tokio::sync::Mutex;
+
+fn pi_agent_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".pi/agent")
+    } else {
+        PathBuf::from("/root/.pi/agent")
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -76,8 +85,33 @@ impl PiBridge {
         // --no-context-files: prevents AGENTS.md leakage from user's Pi config
         // -e (--extension): explicitly loads ONLY the agntos-tools extension
         // --system-prompt: replaces Pi's default prompt with pure AgntOS instructions
-        let mut child = tokio::process::Command::new(&config.pi_binary)
-            .arg("--mode")
+        // Write Pi models.json with custom provider config
+        let agent_dir = pi_agent_dir();
+        std::fs::create_dir_all(&agent_dir).ok();
+        let models_json = serde_json::json!({
+            "providers": {
+                "local-llama": {
+                    "baseUrl": config.llm_base_url,
+                    "api": "openai-completions",
+                    "apiKey": "not-needed",
+                    "models": [
+                        {
+                            "id": "Llama Server",
+                            "name": "Llama Server",
+                            "reasoning": true,
+                            "input": ["text", "image"],
+                            "contextWindow": 131072,
+                            "maxTokens": 8192,
+                            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+                        }
+                    ]
+                }
+            }
+        });
+        let _ = std::fs::write(agent_dir.join("models.json"), serde_json::to_string_pretty(&models_json).unwrap());
+
+        let mut cmd = tokio::process::Command::new(&config.pi_binary);
+        cmd.arg("--mode")
             .arg("rpc")
             .arg("--no-builtin-tools")
             .arg("--no-extensions")
@@ -89,11 +123,24 @@ impl PiBridge {
             .arg(&system_prompt)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .stderr(std::process::Stdio::piped());
+
+        cmd.arg("--model").arg("local-llama/Llama Server");
+
+        let mut child = cmd.spawn()?;
 
         let stdin = child.stdin.take().expect("stdin not available");
         let stdout = child.stdout.take().expect("stdout not available");
+        let stderr = child.stderr.take().expect("stderr not available");
+
+        // Read stderr in a separate task to prevent pipe deadlock
+        tokio::spawn(async move {
+            let reader = tokio::io::BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(Some(_)) = lines.next_line().await {
+                // discard
+            }
+        });
 
         *process.lock().await = Some(PiProcess { child, stdin });
         *status.lock().await = ConnectionStatus {

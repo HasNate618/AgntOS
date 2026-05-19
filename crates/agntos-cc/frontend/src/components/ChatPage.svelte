@@ -24,7 +24,7 @@
         ]);
         currentPartial = "";
       }
-    });
+    }).catch((e) => console.error("listen agent:message-update failed", e));
 
     listen("agent:tool-start", (event) => {
       const data = JSON.parse(event.payload);
@@ -38,7 +38,7 @@
           timestamp: Date.now(),
         },
       ]);
-    });
+    }).catch((e) => console.error("listen agent:tool-start failed", e));
 
     listen("agent:tool-end", (event) => {
       const data = JSON.parse(event.payload);
@@ -55,7 +55,7 @@
           { role: "tool", name: data.toolName, result: data.result, state: "done", timestamp: Date.now() },
         ];
       });
-    });
+    }).catch((e) => console.error("listen agent:tool-end failed", e));
 
     listen("agent:approval-request", (event) => {
       const data = JSON.parse(event.payload);
@@ -70,7 +70,7 @@
           timestamp: Date.now(),
         },
       ]);
-    });
+    }).catch((e) => console.error("listen agent:approval-request failed", e));
 
     listen("agent:error", (event) => {
       const data = JSON.parse(event.payload);
@@ -78,7 +78,7 @@
         ...msgs,
         { role: "error", content: data.message || "An error occurred", timestamp: Date.now() },
       ]);
-    });
+    }).catch((e) => console.error("listen agent:error failed", e));
   });
 
   async function sendMessage() {

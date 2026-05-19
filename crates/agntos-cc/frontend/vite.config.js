@@ -5,7 +5,19 @@ import { defineConfig } from "vite";
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
-  plugins: [tailwindcss(), svelte()],
+  plugins: [
+    tailwindcss(),
+    svelte(),
+    {
+      name: "remove-css-crossorigin",
+      transformIndexHtml(html) {
+        return html.replace(
+          /<link rel="stylesheet"[^>]*crossorigin[^>]*>/g,
+          (match) => match.replace(/\s*crossorigin\s*/g, ""),
+        );
+      },
+    },
+  ],
   clearScreen: false,
   server: {
     port: 5173,
