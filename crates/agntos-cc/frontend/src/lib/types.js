@@ -1,13 +1,3 @@
-export const MODELS = {
- thinking: "thinking",
-  text_delta: "text_delta",
-  text_start: "text_start",
-  text_end: "text_end",
- thinking_delta: "thinking_delta",
-  thinking_start: "thinking_start",
- thinking_end: "thinking_end",
-};
-
 export const TOOLS = {
   inspect: { color: "#22c55e", icon: "🔍" },
   propose: { color: "#6366f1", icon: "📋" },
@@ -16,8 +6,9 @@ export const TOOLS = {
   audit: { color: "#a1a1aa", icon: "📜" },
   memory: { color: "#8b5cf6", icon: "🧠" },
   bash: { color: "#06b6d4", icon: "💻" },
-  read_file: { color: "#94a3b8", icon: "📄" },
-  write_file: { color: "#fb923c", icon: "✏️" },
+  read: { color: "#94a3b8", icon: "📄" },
+  write: { color: "#fb923c", icon: "✏️" },
+  edit: { color: "#f97316", icon: "🔀" },
 };
 
 export function getToolMeta(name) {
