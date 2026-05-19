@@ -162,7 +162,17 @@ impl PiBridge {
                         let _ = app_handle.emit("agent:error", &line);
                     }
                     "turn_start" | "turn_end" => {}
-                    "response" => {}
+                    "response" => {
+                        // Route RPC responses to frontend for specific commands
+                        if let Some(cmd) = event.get("command").and_then(|c| c.as_str()) {
+                            match cmd {
+                                "get_available_models" | "get_state" | "set_model" => {
+                                    let _ = app_handle.emit("agent:rpc-response", &line);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     _ => {
                         let _ = app_handle.emit("agent:unknown-event", &line);
                     }

@@ -21,6 +21,13 @@
 
     listen("agent:connected", () => {
       connection.update((c) => ({ ...c, connected: true }));
+      // Request current state to get model info
+      const { invoke } = window.__TAURI__.core;
+      invoke("get_connection_status").then((status) => {
+        if (status.model) {
+          connection.update((c) => ({ ...c, model: status.model }));
+        }
+      }).catch(() => {});
     });
 
     listen("agent:disconnected", () => {
@@ -33,6 +40,14 @@
 
     listen("agent:end", () => {
       connection.update((c) => ({ ...c, state: "idle" }));
+    });
+
+    listen("agent:rpc-response", (event) => {
+      const data = JSON.parse(event.payload);
+      if (data.command === "set_model" && data.data?.model) {
+        const model = data.data.model;
+        connection.update((c) => ({ ...c, model: model.name || model.id }));
+      }
     });
   });
 </script>

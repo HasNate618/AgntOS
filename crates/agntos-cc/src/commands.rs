@@ -111,6 +111,24 @@ pub async fn send_extension_ui_response(
 }
 
 #[tauri::command]
+pub async fn get_available_models(
+    state: State<'_, BridgeState>,
+) -> Result<serde_json::Value, String> {
+    let guard = state.0.lock().await;
+    if let Some(ref bridge) = *guard {
+        // Send get_available_models RPC and read response from events
+        bridge
+            .send_command(&PiCommand::GetAvailableModels)
+            .await
+            .map_err(|e| e.to_string())?;
+        // Return placeholder - frontend will listen for the response event
+        Ok(serde_json::json!({"status": "requested"}))
+    } else {
+        Err("Agent backend not initialized".into())
+    }
+}
+
+#[tauri::command]
 pub async fn get_connection_status(
     state: State<'_, BridgeState>,
 ) -> Result<ConnectionStatus, String> {

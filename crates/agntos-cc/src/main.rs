@@ -51,6 +51,7 @@ pub fn run() {
             agntos_cc::commands::switch_session,
             agntos_cc::commands::send_extension_ui_response,
             agntos_cc::commands::get_connection_status,
+            agntos_cc::commands::get_available_models,
             agntos_cc::commands::get_system_info,
         ])
         .run(tauri::generate_context!())

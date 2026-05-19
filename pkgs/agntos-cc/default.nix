@@ -1,0 +1,74 @@
+{ lib, rustPlatform, pkg-config, openssl
+, webkitgtk, gtk3, glib, cairo, pango, gdk-pixbuf, atk
+, libsoup, nodejs, makeWrapper, glib-networking
+}:
+
+rustPlatform.buildRustPackage {
+  pname = "agntos-cc";
+  version = "0.1.0";
+
+  src = lib.cleanSourceWith {
+    filter = path: type:
+      lib.cleanSourceFilter path type
+      && baseNameOf path != "node_modules"
+      && baseNameOf path != "target"
+      && !lib.hasSuffix ".png" (baseNameOf path)
+      && !lib.hasSuffix ".jpg" (baseNameOf path)
+      && !lib.hasSuffix ".jpeg" (baseNameOf path)
+      && !lib.hasSuffix ".svg" (baseNameOf path)
+      && !lib.hasSuffix ".qcow2" (baseNameOf path);
+    src = ../..;
+  };
+
+  cargoBuildFlags = [ "-p" "agntos-cc" ];
+
+  nativeBuildInputs = [ pkg-config nodejs makeWrapper ];
+  buildInputs = [
+    openssl webkitgtk gtk3 glib cairo pango
+    gdk-pixbuf atk libsoup glib-networking
+  ];
+
+  cargoLock = {
+    lockFile = ../../Cargo.lock;
+  };
+
+  preBuild = ''
+    pushd crates/agntos-cc/frontend
+    npm install --no-audit --no-fund
+    npm run build
+    popd
+  '';
+
+  postInstall = ''
+    mkdir -p $out/share/agntos
+    cp -r crates/agntos-cc/etc/agntos/AGENTS.md $out/share/agntos/
+    cp -r crates/agntos-cc/etc/agntos/extensions $out/share/agntos/
+
+    mkdir -p $out/share/applications
+    cat > $out/share/applications/agntos-cc.desktop << 'DESKTOP'
+[Desktop Entry]
+Name=AgntOS Control Centre
+Comment=AI-native system agent GUI
+Exec=agntos-cc
+Icon=agntos-start
+Terminal=false
+Type=Application
+Categories=Utility;System;
+StartupNotify=true
+DESKTOP
+  '';
+
+  meta = {
+    description = "Tauri-based GUI for the AgntOS system agent";
+    longDescription = ''
+      AgntOS Control Centre is a desktop application that provides a graphical
+      interface for interacting with the AgntOS system agent. It communicates
+      with Pi backend via stdin/stdout RPC and provides chat, inspection, and
+      system management capabilities.
+    '';
+    homepage = "https://agntos.dev";
+    license = lib.licenses.mit;
+    mainProgram = "agntos-cc";
+    platforms = lib.platforms.linux;
+  };
+}
