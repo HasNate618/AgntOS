@@ -4,6 +4,7 @@ members = [
   "crates/agntctl",
   "crates/agntd",
   "crates/agntos-settings",
+  "crates/agntos-cc",
 ]
 resolver = "2"
 
