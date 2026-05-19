@@ -1,10 +1,24 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+fn config_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("AGNTOS_CONFIG_DIR") {
+        return PathBuf::from(dir);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let local = PathBuf::from(&home).join(".config/agntos");
+        if local.join("AGENTS.md").exists() {
+            return local;
+        }
+    }
+    PathBuf::from("/etc/agntos")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub pi_binary: String,
     pub system_prompt_path: PathBuf,
+    pub extension_path_dir: PathBuf,
     pub extension_path: PathBuf,
     pub model_config_path: PathBuf,
     pub agntctl_path: String,
@@ -15,11 +29,13 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
+        let base = config_dir();
         Self {
             pi_binary: "pi".into(),
-            system_prompt_path: PathBuf::from("/etc/agntos/AGENTS.md"),
-            extension_path: PathBuf::from("/etc/agntos/extensions/agntos-tools/index.ts"),
-            model_config_path: PathBuf::from("/etc/agntos/models.toml"),
+            system_prompt_path: base.join("AGENTS.md"),
+            extension_path_dir: base.join("extensions/agntos-tools"),
+            extension_path: base.join("extensions/agntos-tools/index.ts"),
+            model_config_path: base.join("models.toml"),
             agntctl_path: "agntctl".into(),
             default_model: None,
             host: "0.0.0.0".into(),

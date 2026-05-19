@@ -7,7 +7,16 @@ use tokio::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
     let config = AppConfig::load().unwrap_or_default();
+    tracing::info!("Config: pi={}, prompt={}, extension={}",
+        config.pi_binary, config.system_prompt_path.display(), config.extension_path.display());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -19,12 +28,14 @@ pub fn run() {
             let cfg = config.clone();
 
             tauri::async_runtime::spawn(async move {
+                tracing::info!("Starting Pi bridge...");
                 match PiBridge::start(cfg, handle).await {
                     Ok(bridge) => {
                         *bridge_state.lock().await = Some(bridge);
+                        tracing::info!("Pi bridge started successfully");
                     }
                     Err(e) => {
-                        tracing::error!("Failed to start agent backend: {e}");
+                        tracing::error!("Failed to start Pi bridge: {e}");
                     }
                 }
             });

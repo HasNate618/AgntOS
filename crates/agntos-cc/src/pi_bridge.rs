@@ -71,18 +71,22 @@ impl PiBridge {
 
         // Spawn Pi with identity-stripping flags
         // --no-builtin-tools: disables Pi's read/write/edit/bash, only agntos_* tools exist
+        // --no-extensions: prevents auto-discovery of user's ~/.pi/agent/extensions/
+        // --no-skills: prevents auto-discovery of user's ~/.pi/agent/skills/ and ~/.agents/skills/
         // --no-context-files: prevents AGENTS.md leakage from user's Pi config
+        // -e (--extension): explicitly loads ONLY the agntos-tools extension
         // --system-prompt: replaces Pi's default prompt with pure AgntOS instructions
-        // --extension: loads the agntos-tools extension
         let mut child = tokio::process::Command::new(&config.pi_binary)
             .arg("--mode")
             .arg("rpc")
             .arg("--no-builtin-tools")
+            .arg("--no-extensions")
+            .arg("--no-skills")
             .arg("--no-context-files")
+            .arg("-e")
+            .arg(&config.extension_path)
             .arg("--system-prompt")
             .arg(&system_prompt)
-            .arg("--extension")
-            .arg(&config.extension_path)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
