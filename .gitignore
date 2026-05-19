@@ -17,6 +17,9 @@
 .env.*
 !.env.example
 
+# Node.js
+node_modules/
+
 # Editor and OS noise
 .DS_Store
 *.swp
