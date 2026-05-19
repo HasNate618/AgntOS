@@ -29,7 +29,7 @@ in
 
 {
   imports =
-    [ ./agntos-settings.nix ]
+    [ ./agntos-cc.nix ./agntos-settings.nix ]
     ++ packagesImports
     ++ optionalImport "${cfgDir}/custom.nix"
     ++ optionsImports
