@@ -5,6 +5,7 @@
   agntos.edition = "dev";
   agntos.agent.enable = true;
   agntos.settings.enable = true;
+  agntos.agntos-cc.enable = true;
   # Inside the VM the source is mounted at /mnt/agntos-src
   agntos.rebuild.flakeUri = "/mnt/agntos-src#agntos-dev-vm";
 
