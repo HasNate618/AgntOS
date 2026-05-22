@@ -112,7 +112,11 @@ fn strip_thinking(content: &str, in_thinking: &mut bool) -> Option<String> {
         }
     }
 
-    if result.trim().is_empty() { None } else { Some(result) }
+    if result.trim().is_empty() {
+        None
+    } else {
+        Some(result)
+    }
 }
 
 impl Default for AppSession {
@@ -186,12 +190,13 @@ impl AppSession {
                     let last_is_assistant = self.chat.entries.last().map_or(false, |e| {
                         matches!(e.entry_type, ChatEntryType::AssistantText)
                     });
-                    let last_is_tool_result = self.chat.entries.last().map_or(false, |e| {
-                        matches!(e.entry_type, ChatEntryType::ToolResult)
-                    });
-                    let needs_new_text = self.chat.entries.is_empty()
-                        || last_is_tool_result
-                        || !last_is_assistant;
+                    let last_is_tool_result = self
+                        .chat
+                        .entries
+                        .last()
+                        .map_or(false, |e| matches!(e.entry_type, ChatEntryType::ToolResult));
+                    let needs_new_text =
+                        self.chat.entries.is_empty() || last_is_tool_result || !last_is_assistant;
                     if needs_new_text {
                         self.chat.add_assistant_text(c);
                     } else {
@@ -203,43 +208,62 @@ impl AppSession {
                 }
             }
 
-            ServerMessage::ToolCall { id, name, args, status } => {
-                match status {
-                    ToolCallStatus::Running => {
-                        self.chat.add_tool_call(id, name, args.clone());
-                        self.turn_state = TurnState::ToolRunning {
-                            name: name.clone(),
-                            detail: args.to_string(),
+            ServerMessage::ToolCall {
+                id,
+                name,
+                args,
+                status,
+            } => match status {
+                ToolCallStatus::Running => {
+                    self.chat.add_tool_call(id, name, args.clone());
+                    self.turn_state = TurnState::ToolRunning {
+                        name: name.clone(),
+                        detail: args.to_string(),
+                    };
+                }
+                ToolCallStatus::Done => {
+                    if let Some(entry) = self
+                        .chat
+                        .entries
+                        .iter_mut()
+                        .rev()
+                        .find(|e| e.tool_id.as_deref() == Some(id.as_str()))
+                    {
+                        entry.tool_status = Some("done".to_string());
+                    } else {
+                        let entry = ChatEntry {
+                            entry_type: ChatEntryType::ToolResult,
+                            content: String::new(),
+                            tool_name: Some(name.clone()),
+                            tool_id: Some(id.clone()),
+                            tool_args: Some(args.clone()),
+                            tool_status: Some("done".to_string()),
+                            tool_success: None,
+                            proposal_id: None,
+                            proposal_summary: None,
                         };
-                    }
-                    ToolCallStatus::Done => {
-                        if let Some(entry) = self.chat.entries.iter_mut().rev().find(|e| e.tool_id.as_deref() == Some(id.as_str())) {
-                            entry.tool_status = Some("done".to_string());
-                        } else {
-                            let entry = ChatEntry {
-                                entry_type: ChatEntryType::ToolResult,
-                                content: String::new(),
-                                tool_name: Some(name.clone()),
-                                tool_id: Some(id.clone()),
-                                tool_args: Some(args.clone()),
-                                tool_status: Some("done".to_string()),
-                                tool_success: None,
-                                proposal_id: None,
-                                proposal_summary: None,
-                            };
-                            self.chat.entries.push(entry);
-                        }
+                        self.chat.entries.push(entry);
                     }
                 }
-            }
+            },
 
-            ServerMessage::ToolResult { id, output, success, .. } => {
+            ServerMessage::ToolResult {
+                id,
+                output,
+                success,
+                ..
+            } => {
                 self.chat.resolve_tool_call(id, output, *success);
                 self.turn_state = TurnState::Streaming;
             }
 
-            ServerMessage::ApprovalRequest { proposal_id, summary, tool_call_id } => {
-                self.chat.add_approval_request(proposal_id, summary, tool_call_id);
+            ServerMessage::ApprovalRequest {
+                proposal_id,
+                summary,
+                tool_call_id,
+            } => {
+                self.chat
+                    .add_approval_request(proposal_id, summary, tool_call_id);
                 self.turn_state = TurnState::AwaitingApproval;
             }
 
@@ -271,87 +295,132 @@ impl AppSession {
                 self.audit = entries
                     .iter()
                     .map(|e| AuditEntry {
-                        audit_id: e.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        timestamp: e.get("timestamp").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        action_type: e.get("action")
+                        audit_id: e
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        timestamp: e
+                            .get("timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        action_type: e
+                            .get("action")
                             .and_then(|a| a.get("type"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string(),
-                        summary: e.get("summary").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        status: e.get("result")
+                        summary: e
+                            .get("summary")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        status: e
+                            .get("result")
                             .and_then(|r| r.get("status"))
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown")
                             .to_string(),
-                        prompt: e.get("prompt").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        actor: e.get("actor").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        prompt: e
+                            .get("prompt")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        actor: e
+                            .get("actor")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                     })
                     .collect();
             }
 
-            ServerMessage::Event { event, data } => {
-                match event.as_str() {
-                    "proposal_created" => {
-                        if let Some(pid) = data.get("proposal_id").and_then(|v| v.as_str()) {
-                            let summary = data.get("summary").and_then(|v| v.as_str()).unwrap_or("");
-                            if !self.proposals.iter().any(|p| p.proposal_id == pid) {
-                                self.proposals.push(Proposal {
-                                    proposal_id: pid.to_string(),
-                                    summary: summary.to_string(),
-                                    nix_changes: String::new(),
-                                    rollback_guidance: String::new(),
-                                    created_at: String::new(),
-                                    status: ProposalStatus::Pending,
-                                });
-                            }
+            ServerMessage::Event { event, data } => match event.as_str() {
+                "proposal_created" => {
+                    if let Some(pid) = data.get("proposal_id").and_then(|v| v.as_str()) {
+                        let summary = data.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+                        if !self.proposals.iter().any(|p| p.proposal_id == pid) {
+                            self.proposals.push(Proposal {
+                                proposal_id: pid.to_string(),
+                                summary: summary.to_string(),
+                                nix_changes: String::new(),
+                                rollback_guidance: String::new(),
+                                created_at: String::new(),
+                                status: ProposalStatus::Pending,
+                            });
                         }
                     }
-                    "watchdog_alert" => {
-                        self.status.watchdog_alert_count += 1;
-                    }
-                    "rebuild_started" => {
-                        if let Some(pid) = data.get("proposal_id").and_then(|v| v.as_str()) {
-                            if let Some(p) = self.proposals.iter_mut().find(|p| p.proposal_id == pid) {
-                                p.status = ProposalStatus::Applied;
-                            }
-                        }
-                    }
-                    "rebuild_complete" => {
-                        if let Some(pid) = data.get("proposal_id").and_then(|v| v.as_str()) {
-                            if let Some(p) = self.proposals.iter_mut().find(|p| p.proposal_id == pid) {
-                                let success = data.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
-                                p.status = if success {
-                                    ProposalStatus::Applied
-                                } else {
-                                    ProposalStatus::Pending
-                                };
-                            }
-                        }
-                    }
-                    "audit_entry" => {
-                        let entry = AuditEntry {
-                            audit_id: data.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                            timestamp: data.get("timestamp").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                            action_type: data.get("action")
-                                .and_then(|a| a.get("type"))
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            summary: data.get("summary").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                            status: data.get("result")
-                                .and_then(|r| r.get("status"))
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown")
-                                .to_string(),
-                            prompt: data.get("prompt").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                            actor: data.get("actor").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        };
-                        self.audit.insert(0, entry);
-                    }
-                    _ => {}
                 }
-            }
+                "watchdog_alert" => {
+                    self.status.watchdog_alert_count += 1;
+                }
+                "rebuild_started" => {
+                    if let Some(pid) = data.get("proposal_id").and_then(|v| v.as_str()) {
+                        if let Some(p) = self.proposals.iter_mut().find(|p| p.proposal_id == pid) {
+                            p.status = ProposalStatus::Applied;
+                        }
+                    }
+                }
+                "rebuild_complete" => {
+                    if let Some(pid) = data.get("proposal_id").and_then(|v| v.as_str()) {
+                        if let Some(p) = self.proposals.iter_mut().find(|p| p.proposal_id == pid) {
+                            let success = data
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            p.status = if success {
+                                ProposalStatus::Applied
+                            } else {
+                                ProposalStatus::Pending
+                            };
+                        }
+                    }
+                }
+                "audit_entry" => {
+                    let entry = AuditEntry {
+                        audit_id: data
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        timestamp: data
+                            .get("timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        action_type: data
+                            .get("action")
+                            .and_then(|a| a.get("type"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        summary: data
+                            .get("summary")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        status: data
+                            .get("result")
+                            .and_then(|r| r.get("status"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                        prompt: data
+                            .get("prompt")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        actor: data
+                            .get("actor")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    };
+                    self.audit.insert(0, entry);
+                }
+                _ => {}
+            },
 
             ServerMessage::Error { message } => {
                 self.turn_state = TurnState::Error {
@@ -425,25 +494,29 @@ mod tests {
             status: ToolCallStatus::Running,
         });
         assert_eq!(s.chat.entries.len(), 1);
-        assert!(matches!(s.chat.entries[0].entry_type, ChatEntryType::ToolCall));
-        assert_eq!(s.chat.entries[0].tool_id.as_deref(), Some("tc-1"));
         assert!(matches!(
-            s.turn_state,
-            TurnState::ToolRunning { .. }
+            s.chat.entries[0].entry_type,
+            ChatEntryType::ToolCall
         ));
+        assert_eq!(s.chat.entries[0].tool_id.as_deref(), Some("tc-1"));
+        assert!(matches!(s.turn_state, TurnState::ToolRunning { .. }));
     }
 
     #[test]
     fn tool_result_resolves_tool_call() {
         let mut s = AppSession::new();
-        s.chat.add_tool_call("tc-1", "inspect", serde_json::json!({}));
+        s.chat
+            .add_tool_call("tc-1", "inspect", serde_json::json!({}));
         s.handle_server_message(&ServerMessage::ToolResult {
             id: "tc-1".to_string(),
             name: "inspect".to_string(),
             output: "CPU: 8 cores".to_string(),
             success: true,
         });
-        assert!(matches!(s.chat.entries[0].entry_type, ChatEntryType::ToolResult));
+        assert!(matches!(
+            s.chat.entries[0].entry_type,
+            ChatEntryType::ToolResult
+        ));
         assert_eq!(s.chat.entries[0].content, "CPU: 8 cores");
         assert_eq!(s.chat.entries[0].tool_success, Some(true));
     }
@@ -457,7 +530,10 @@ mod tests {
             tool_call_id: "tc-2".to_string(),
         });
         assert_eq!(s.chat.entries.len(), 1);
-        assert!(matches!(s.chat.entries[0].entry_type, ChatEntryType::ApprovalRequest));
+        assert!(matches!(
+            s.chat.entries[0].entry_type,
+            ChatEntryType::ApprovalRequest
+        ));
         assert_eq!(s.chat.entries[0].proposal_id.as_deref(), Some("p-abc"));
         assert!(matches!(s.turn_state, TurnState::AwaitingApproval));
     }
@@ -577,7 +653,10 @@ mod tests {
             content: "</think> The answer is".to_string(),
         });
         assert_eq!(s.chat.entries.len(), 1);
-        assert!(matches!(s.chat.entries[0].entry_type, ChatEntryType::AssistantText));
+        assert!(matches!(
+            s.chat.entries[0].entry_type,
+            ChatEntryType::AssistantText
+        ));
         assert!(s.chat.entries[0].content.contains("The answer is"));
         assert!(matches!(s.turn_state, TurnState::Streaming));
     }

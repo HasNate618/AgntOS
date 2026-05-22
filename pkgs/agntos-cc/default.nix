@@ -1,6 +1,7 @@
 { lib, rustPlatform, pkg-config, openssl
-, webkitgtk, gtk3, glib, cairo, pango, gdk-pixbuf, atk
-, libsoup, nodejs, makeWrapper, glib-networking
+, webkitgtk_4_1, gtk3, glib, cairo, pango, gdk-pixbuf, atk
+, libsoup_3, makeWrapper, glib-networking
+, agntos-cc-frontend
 }:
 
 rustPlatform.buildRustPackage {
@@ -12,20 +13,27 @@ rustPlatform.buildRustPackage {
       lib.cleanSourceFilter path type
       && baseNameOf path != "node_modules"
       && baseNameOf path != "target"
-      && !lib.hasSuffix ".png" (baseNameOf path)
-      && !lib.hasSuffix ".jpg" (baseNameOf path)
-      && !lib.hasSuffix ".jpeg" (baseNameOf path)
-      && !lib.hasSuffix ".svg" (baseNameOf path)
+      && !(lib.hasSuffix ".png" (baseNameOf path) && !lib.hasInfix "/icons/" path)
+      && !(lib.hasSuffix ".jpg" (baseNameOf path) && !lib.hasInfix "/icons/" path)
+      && !(lib.hasSuffix ".jpeg" (baseNameOf path) && !lib.hasInfix "/icons/" path)
+      && !(lib.hasSuffix ".svg" (baseNameOf path) && !lib.hasInfix "/icons/" path)
       && !lib.hasSuffix ".qcow2" (baseNameOf path);
     src = ../..;
   };
 
   cargoBuildFlags = [ "-p" "agntos-cc" ];
 
-  nativeBuildInputs = [ pkg-config nodejs makeWrapper ];
+  postPatch = ''
+    substituteInPlace Cargo.toml \
+      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n  "crates/agntos-cc",\n]' \
+      $'members = ["crates/agntos-cc"]\ndefault-members = ["crates/agntos-cc"]'
+  '';
+
+  nativeBuildInputs = [ pkg-config makeWrapper ];
   buildInputs = [
-    openssl webkitgtk gtk3 glib cairo pango
-    gdk-pixbuf atk libsoup glib-networking
+    openssl webkitgtk_4_1 gtk3 glib cairo pango
+    gdk-pixbuf atk libsoup_3 glib-networking
+    agntos-cc-frontend
   ];
 
   cargoLock = {
@@ -33,10 +41,11 @@ rustPlatform.buildRustPackage {
   };
 
   preBuild = ''
-    pushd crates/agntos-cc/frontend
-    npm install --no-audit --no-fund
-    npm run build
-    popd
+    echo ">>> [agntos-cc] copying pre-built frontend from ${agntos-cc-frontend}"
+    rm -rf crates/agntos-cc/frontend/dist
+    cp -r ${agntos-cc-frontend}/dist crates/agntos-cc/frontend/dist
+    test -f crates/agntos-cc/frontend/dist/index.html
+    echo ">>> [agntos-cc] frontend ready"
   '';
 
   postInstall = ''

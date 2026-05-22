@@ -9,14 +9,17 @@ use tokio::sync::Mutex;
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
     let config = AppConfig::load().unwrap_or_default();
-    tracing::info!("Config: pi={}, prompt={}, extension={}",
-        config.pi_binary, config.system_prompt_path.display(), config.extension_path.display());
+    tracing::info!(
+        "Config: pi={}, prompt={}, extension={}",
+        config.pi_binary,
+        config.system_prompt_path.display(),
+        config.extension_path.display()
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -63,6 +66,10 @@ pub fn run() {
             agntos_cc::commands::get_connection_status,
             agntos_cc::commands::get_available_models,
             agntos_cc::commands::get_system_info,
+            agntos_cc::commands::list_proposals,
+            agntos_cc::commands::apply_proposal,
+            agntos_cc::commands::list_audit_entries,
+            agntos_cc::commands::rollback_to,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgntOS Control Centre");

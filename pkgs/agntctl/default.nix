@@ -17,6 +17,12 @@ rustPlatform.buildRustPackage {
 
   cargoBuildFlags = [ "-p" "agntctl" ];
 
+  postPatch = ''
+    substituteInPlace Cargo.toml \
+      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n  "crates/agntos-cc",\n]' \
+      $'members = ["crates/agnt-common", "crates/agntctl"]\ndefault-members = ["crates/agntctl"]'
+  '';
+
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [ openssl ];
 

@@ -206,6 +206,17 @@ enum Command {
         #[arg(long)]
         config_dir: Option<PathBuf>,
     },
+    /// Look up a NixOS option's description, type, default, and example
+    #[command(name = "option")]
+    Opt {
+        /// The option name (e.g. services.nginx.enable)
+        #[arg()]
+        option: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Read a file's contents
     Read {
         /// File path
@@ -610,6 +621,78 @@ fn main() {
                 Ok(output) => print!("{}", output),
                 Err(e) => {
                     eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Command::Opt { option, json } => {
+            let expr = format!(
+                r#"let flake = builtins.getFlake "nixpkgs"; nixos = import "${{flake.outPath}}/nixos/lib/eval-config.nix" {{ modules = []; system = builtins.currentSystem; }}; o = nixos.options.{}; in {{ description = o.description or null; type = (builtins.tryEval o.type.description).value or null; default = o.default or null; example = o.example or null; }}"#,
+                option
+            );
+
+            let output = std::process::Command::new("nix")
+                .args([
+                    "--extra-experimental-features",
+                    "nix-command flakes",
+                    "eval",
+                    "--impure",
+                    "--expr",
+                    &expr,
+                    "--json",
+                ])
+                .output();
+
+            match output {
+                Ok(out) if out.status.success() => {
+                    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                    if json {
+                        println!("{}", stdout.trim());
+                    } else {
+                        if let Ok(parsed) =
+                            serde_json::from_str::<serde_json::Value>(stdout.trim())
+                        {
+                            println!("Option: {}", option);
+                            if let Some(desc) = parsed.get("description").and_then(|v| v.as_str())
+                            {
+                                if !desc.is_empty() {
+                                    println!("  description: {}", desc);
+                                }
+                            }
+                            if let Some(typ) = parsed.get("type").and_then(|v| v.as_str()) {
+                                if !typ.is_empty() {
+                                    println!("  type: {}", typ);
+                                }
+                            }
+                            if let Some(def) = parsed.get("default") {
+                                if !def.is_null() {
+                                    let ds = serde_json::to_string_pretty(def)
+                                        .unwrap_or_else(|_| def.to_string());
+                                    println!("  default: {}", ds);
+                                }
+                            }
+                            if let Some(ex) = parsed.get("example") {
+                                if !ex.is_null() {
+                                    let es = serde_json::to_string_pretty(ex)
+                                        .unwrap_or_else(|_| ex.to_string());
+                                    println!("  example: {}", es);
+                                }
+                            }
+                        } else {
+                            println!("{}", stdout.trim());
+                        }
+                    }
+                }
+                Ok(out) => {
+                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    eprintln!(
+                        "Error: Option '{}' not found or could not be evaluated\n{}",
+                        option, stderr
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("Error executing nix: {}", e);
                     std::process::exit(1);
                 }
             }

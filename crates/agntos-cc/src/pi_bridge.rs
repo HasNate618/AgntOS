@@ -1,10 +1,98 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout};
 use tokio::sync::Mutex;
+
+fn resolve_agntctl(config: &crate::config::AppConfig) -> String {
+    let name = &config.agntctl_path;
+    let path = Path::new(name);
+
+    if path.is_absolute() {
+        if path.exists() {
+            return path.to_string_lossy().into_owned();
+        }
+        return name.clone();
+    }
+
+    if let Ok(paths) = std::env::var("PATH") {
+        for dir in paths.split(':') {
+            let candidate = Path::new(dir).join(name);
+            if candidate.exists() {
+                return candidate.to_string_lossy().into_owned();
+            }
+        }
+    }
+
+    for dir in &[
+        "/usr/local/bin",
+        "/mnt/agntos-src/target/release",
+        "/home/developer/target/release",
+    ] {
+        let candidate = Path::new(dir).join(name);
+        if candidate.exists() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+
+    name.clone()
+}
+
+fn collect_system_context() -> String {
+    let generation = std::process::Command::new("nixos-rebuild")
+        .args(["list-generations"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            String::from_utf8(o.stdout)
+                .ok()
+                .and_then(|s| s.lines().nth(1).map(|l| l.to_string()))
+        })
+        .unwrap_or_default();
+
+    let disk = std::process::Command::new("df")
+        .args(["-h", "/"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            String::from_utf8(o.stdout).ok().and_then(|s| {
+                s.lines().nth(1).map(|l| {
+                    let parts: Vec<&str> = l.split_whitespace().collect();
+                    format!("{} used / {} total", parts.get(2).unwrap_or(&"?"), parts.get(1).unwrap_or(&"?"))
+                })
+            })
+        })
+        .unwrap_or_default();
+
+    let memory = std::process::Command::new("free")
+        .args(["-h"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            String::from_utf8(o.stdout).ok().and_then(|s| {
+                s.lines().nth(1).map(|l| {
+                    let parts: Vec<&str> = l.split_whitespace().collect();
+                    format!("{} used / {} total", parts.get(2).unwrap_or(&"?"), parts.get(1).unwrap_or(&"?"))
+                })
+            })
+        })
+        .unwrap_or_default();
+
+    let mut ctx = String::from("--- System Context ---\n");
+    if !generation.is_empty() {
+        ctx.push_str(&format!("Generation: {}\n", generation));
+    }
+    if !disk.is_empty() {
+        ctx.push_str(&format!("Disk: {}\n", disk));
+    }
+    if !memory.is_empty() {
+        ctx.push_str(&format!("Memory: {}\n", memory));
+    }
+    ctx.push_str("--- End System Context ---\n\n");
+    ctx
+}
 
 fn pi_agent_dir() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
@@ -108,7 +196,10 @@ impl PiBridge {
                 }
             }
         });
-        let _ = std::fs::write(agent_dir.join("models.json"), serde_json::to_string_pretty(&models_json).unwrap());
+        let _ = std::fs::write(
+            agent_dir.join("models.json"),
+            serde_json::to_string_pretty(&models_json).unwrap(),
+        );
 
         let mut cmd = tokio::process::Command::new(&config.pi_binary);
         cmd.arg("--mode")
@@ -124,6 +215,23 @@ impl PiBridge {
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+
+        // Resolve agntctl and pass absolute path to Pi extension
+        let agntctl_path = resolve_agntctl(&config);
+        cmd.env("AGNTCTL_PATH", &agntctl_path);
+
+        // Also ensure agntctl's directory is on PATH for the subprocess
+        let agntctl_dir = Path::new(&agntctl_path).parent().and_then(|p| {
+            if p.as_os_str().is_empty() {
+                None
+            } else {
+                Some(p.to_string_lossy().into_owned())
+            }
+        });
+        if let Some(dir) = agntctl_dir {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            cmd.env("PATH", format!("{}:{}", dir, current_path));
+        }
 
         cmd.arg("--model").arg("local-llama/Llama Server");
 
@@ -240,7 +348,17 @@ impl PiBridge {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut guard = self.process.lock().await;
         if let Some(ref mut proc) = *guard {
-            let json = serde_json::to_string(command)?;
+            let enriched = match command {
+                PiCommand::Prompt { message, streaming_behavior } => {
+                    let context = collect_system_context();
+                    PiCommand::Prompt {
+                        message: format!("{}{}", context, message),
+                        streaming_behavior: streaming_behavior.clone(),
+                    }
+                }
+                _ => command.clone(),
+            };
+            let json = serde_json::to_string(&enriched)?;
             proc.stdin.write_all(json.as_bytes()).await?;
             proc.stdin.write_all(b"\n").await?;
             proc.stdin.flush().await?;

@@ -334,9 +334,11 @@ fn handle_persistent_session(
                     let mut depth = 0;
                     while depth < 8 {
                         depth += 1;
-                        let resp = match runtime.block_on(
-                            client.complete_streaming_to_writer(&messages, &tools, &mut writer_clone)
-                        ) {
+                        let resp = match runtime.block_on(client.complete_streaming_to_writer(
+                            &messages,
+                            &tools,
+                            &mut writer_clone,
+                        )) {
                             Ok(r) => r,
                             Err(e) => {
                                 let err_msg = ServerMessage::Error {
@@ -378,8 +380,7 @@ fn handle_persistent_session(
                             );
 
                             if tc.name == "apply" || tc.name == "rollback" {
-                                let pid = tc.arguments
-                                    .get("proposal_id").and_then(|v| v.as_str());
+                                let pid = tc.arguments.get("proposal_id").and_then(|v| v.as_str());
                                 let summary = pid.map_or_else(
                                     || "Roll back NixOS generation".to_string(),
                                     |id| format!("Apply proposal {}", id),

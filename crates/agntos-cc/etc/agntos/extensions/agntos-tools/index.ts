@@ -2,12 +2,16 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { execSync } from "node:child_process";
 
-const AGNTCTL = "agntctl";
+const AGNTCTL = process.env.AGNTCTL_PATH || "agntctl";
 const CONFIG_DIR = "/etc/agntos";
+
+function quote(a: string) {
+  return a.includes(' ') ? `"${a}"` : a;
+}
 
 function run(args: string[], timeout = 30000): { content: Array<{ type: string; text: string }> } {
   try {
-    const result = execSync(`${AGNTCTL} ${args.join(" ")}`, {
+    const result = execSync(`${AGNTCTL} ${args.map(quote).join(" ")}`, {
       encoding: "utf-8",
       timeout,
       maxBuffer: 10 * 1024 * 1024,
@@ -21,94 +25,21 @@ function run(args: string[], timeout = 30000): { content: Array<{ type: string; 
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
-    name: "agntos_inspect",
-    label: "AgntOS Inspect",
-    description:
-      "Inspect AgntOS system state. Returns CPU, memory, disks, network, GPU, services, or general system info.",
-    parameters: Type.Object({
-      target: Type.Optional(
-        Type.String({
-          description:
-            "What to inspect: system (overview), cpu, memory, disks, network, gpu, services. Defaults to system.",
-        })
-      ),
-    }),
-    async execute(_toolCallId: string, params: { target?: string }, _signal: AbortSignal, _onUpdate: any, _ctx: any) {
-      return run(["inspect", params.target || "system"]);
-    },
-  });
-
-  pi.registerTool({
     name: "agntos_propose",
     label: "AgntOS Propose",
     description:
-      "Generate a NixOS configuration change proposal. Describe what you want to change and agntctl will generate the Nix files. Returns a proposal ID for use with agntos_apply.",
+      "Generate a NixOS configuration change proposal. Describe what you want to change and agntctl will generate the Nix files. Returns a proposal ID for review and application from the UI.",
     parameters: Type.Object({
       prompt: Type.String({
         description: "Description of the desired change, e.g. 'install nginx and enable it as a service'",
       }),
     }),
     promptGuidelines: [
-      "Use agntos_propose before agntos_apply. Never apply changes without a proposal.",
-      "If the user just says 'install nginx', first use agntos_inspect to check current state, then agntos_propose.",
+      "Use agntos_propose to stage configuration changes. Present the proposal to the user. The user applies from the UI.",
+      "Use agntos_option to look up option docs before proposing changes with unfamiliar options.",
     ],
     async execute(_toolCallId: string, params: { prompt: string }, _signal: AbortSignal, _onUpdate: any, _ctx: any) {
       return run(["propose", "--config-dir", CONFIG_DIR, params.prompt]);
-    },
-  });
-
-  pi.registerTool({
-    name: "agntos_apply",
-    label: "AgntOS Apply",
-    description:
-      "Apply a NixOS proposal by ID. REQUIRES USER CONFIRMATION before executing. Always present the proposal details to the user before calling this tool.",
-    parameters: Type.Object({
-      proposalId: Type.String({
-        description: "The ID of the proposal to apply (returned by agntos_propose)",
-      }),
-    }),
-    promptGuidelines: [
-      "Never call agntos_apply without first presenting the proposal to the user and getting their approval via this tool's confirmation dialog.",
-      "agntos_apply triggers a nixos-rebuild which modifies the system configuration.",
-    ],
-    async execute(
-      _toolCallId: string,
-      params: { proposalId: string },
-      _signal: AbortSignal,
-      _onUpdate: any,
-      ctx: any
-    ) {
-      const approved = await ctx.ui.confirm({
-        title: `Apply proposal ${params.proposalId}?`,
-        message: "This will modify your NixOS configuration and trigger a nixos-rebuild. Continue?",
-      });
-
-      if (!approved) {
-        return { content: [{ type: "text", text: "Proposal application cancelled by user." }], isError: true };
-      }
-
-      return run(["apply", "--config-dir", CONFIG_DIR, params.proposalId], 120000);
-    },
-  });
-
-  pi.registerTool({
-    name: "agntos_rollback",
-    label: "AgntOS Rollback",
-    description:
-      "Roll back to a previous NixOS generation. Specify the generation number or use the latest successful apply as the rollback target.",
-    parameters: Type.Object({
-      generation: Type.Optional(
-        Type.Integer({
-          description: "Optional generation number to roll back to. Omit to rollback the last apply.",
-        })
-      ),
-    }),
-    async execute(_toolCallId: string, params: { generation?: number }, _signal: AbortSignal, _onUpdate: any, _ctx: any) {
-      const args = ["rollback"];
-      if (params.generation !== undefined) {
-        args.push("--generation", String(params.generation));
-      }
-      return run(args, 120000);
     },
   });
 
@@ -135,6 +66,21 @@ export default function (pi: ExtensionAPI) {
         return run(["audit", "show", params.id]);
       }
       return run(["audit", "list", "--limit", "50"]);
+    },
+  });
+
+  pi.registerTool({
+    name: "agntos_option",
+    label: "NixOS Option Lookup",
+    description:
+      "Look up a NixOS option's type, default, description, and example. Use before proposing changes with unfamiliar options.",
+    parameters: Type.Object({
+      option: Type.String({
+        description: "The NixOS option path, e.g. services.nginx.enable",
+      }),
+    }),
+    async execute(_toolCallId: string, params: { option: string }, _signal: AbortSignal, _onUpdate: any, _ctx: any) {
+      return run(["option", params.option], 30000);
     },
   });
 

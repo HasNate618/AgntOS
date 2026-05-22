@@ -145,7 +145,11 @@ impl LlmClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
-            eprintln!("[llm] REQUEST FAILED ({}): first 200 chars of body: {}", status, &body[..body.len().min(200)]);
+            eprintln!(
+                "[llm] REQUEST FAILED ({}): first 200 chars of body: {}",
+                status,
+                &body[..body.len().min(200)]
+            );
             return Err(format!("LLM returned {}: {}", status, body));
         }
 
@@ -219,7 +223,11 @@ impl LlmClient {
         let endpoint = normalize_endpoint(&self.profile.endpoint);
         let payload = completion_payload(&self.profile, messages, tools, true);
 
-        eprintln!("[llm] streaming request: {} messages, model={}", messages.len(), self.profile.model);
+        eprintln!(
+            "[llm] streaming request: {} messages, model={}",
+            messages.len(),
+            self.profile.model
+        );
 
         let mut req = self
             .http

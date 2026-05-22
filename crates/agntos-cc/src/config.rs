@@ -74,6 +74,9 @@ impl AppConfig {
                 if let Some(url) = agntos.get("llm_base_url").and_then(|v| v.as_str()) {
                     config.llm_base_url = url.into();
                 }
+                if let Some(actl) = agntos.get("agntctl_path").and_then(|v| v.as_str()) {
+                    config.agntctl_path = actl.into();
+                }
             }
 
             if let Some(host) = parsed.get("host").and_then(|v| v.as_str()) {

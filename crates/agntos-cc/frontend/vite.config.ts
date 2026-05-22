@@ -1,4 +1,5 @@
-import { svelte } from "@sveltejs/vite-plugin-svelte";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,7 +10,8 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [
-    svelte(),
+    react(),
+    tailwindcss(),
     {
       name: "inline-css",
       enforce: "post",
@@ -19,7 +21,6 @@ export default defineConfig({
         if (!fs.existsSync(htmlPath)) return;
 
         let html = fs.readFileSync(htmlPath, "utf-8");
-        const assetsDir = path.resolve(outDir, "assets");
 
         html = html.replace(
           /<link rel="stylesheet"[^>]*href="([^"]+\.css)"[^>]*>/g,
@@ -38,6 +39,11 @@ export default defineConfig({
       },
     },
   ],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   clearScreen: false,
   server: {
     port: 5173,

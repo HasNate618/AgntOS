@@ -132,15 +132,21 @@ fn serve_mock(path: &str, done: Arc<Mutex<bool>>) -> thread::JoinHandle<()> {
             }
         };
 
-        session_stream.set_read_timeout(Some(Duration::from_millis(200))).ok();
+        session_stream
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .ok();
         let mut session_writer = session_stream.try_clone().expect("clone session writer");
         let mut session_reader = BufReader::new(session_stream);
 
         let mut line = String::new();
         match session_reader.read_line(&mut line) {
-            Ok(0) => { return; }
+            Ok(0) => {
+                return;
+            }
             Ok(_) => {}
-            Err(_) => { return; }
+            Err(_) => {
+                return;
+            }
         }
         line = line.trim().to_string();
         let parsed: ClientMessage = serde_json::from_str(&line).unwrap_or(ClientMessage::Cancel);
@@ -171,7 +177,9 @@ fn serve_mock(path: &str, done: Arc<Mutex<bool>>) -> thread::JoinHandle<()> {
             }
         };
 
-        script_stream.set_read_timeout(Some(Duration::from_millis(100))).ok();
+        script_stream
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .ok();
         let mut script_reader = BufReader::new(script_stream);
 
         loop {
@@ -181,13 +189,20 @@ fn serve_mock(path: &str, done: Arc<Mutex<bool>>) -> thread::JoinHandle<()> {
 
             let mut script_line = String::new();
             match script_reader.read_line(&mut script_line) {
-                Ok(0) => { return; }
+                Ok(0) => {
+                    return;
+                }
                 Ok(_) => {}
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                Err(ref e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
                     thread::sleep(Duration::from_millis(50));
                     continue;
                 }
-                Err(_) => { return; }
+                Err(_) => {
+                    return;
+                }
             }
             let script_line = script_line.trim().to_string();
             if script_line.is_empty() {
@@ -196,19 +211,28 @@ fn serve_mock(path: &str, done: Arc<Mutex<bool>>) -> thread::JoinHandle<()> {
 
             let responses: Vec<ServerMessage> = match serde_json::from_str(&script_line) {
                 Ok(r) => r,
-                Err(_) => { return; }
+                Err(_) => {
+                    return;
+                }
             };
 
             let mut session_line = String::new();
             match session_reader.read_line(&mut session_line) {
-                Ok(0) => { return; }
+                Ok(0) => {
+                    return;
+                }
                 Ok(_) => {}
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                Err(ref e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
                     // Session read timed out — test might not have sent yet
                     thread::sleep(Duration::from_millis(50));
                     continue;
                 }
-                Err(_) => { return; }
+                Err(_) => {
+                    return;
+                }
             }
 
             for resp in &responses {
@@ -434,7 +458,10 @@ fn session_turn_lifecycle() {
         agntos_settings::models::ChatEntryType::AssistantText
     ));
     assert_eq!(session.chat.entries[0].content, "Hello world!");
-    assert!(matches!(session.turn_state, agntos_settings::session::TurnState::Completed));
+    assert!(matches!(
+        session.turn_state,
+        agntos_settings::session::TurnState::Completed
+    ));
 
     *done.lock().unwrap() = true;
     server.join().unwrap();
@@ -580,7 +607,10 @@ fn session_approval_turn() {
         session.chat.entries[1].proposal_summary.as_deref(),
         Some("Install nginx")
     );
-    assert!(matches!(session.turn_state, agntos_settings::session::TurnState::AwaitingApproval));
+    assert!(matches!(
+        session.turn_state,
+        agntos_settings::session::TurnState::AwaitingApproval
+    ));
 
     let responses2 = serde_json::json!([
         {"type": "token", "content": " Approved"},
@@ -604,7 +634,10 @@ fn session_approval_turn() {
         agntos_settings::models::ChatEntryType::AssistantText
     ));
     assert_eq!(session.chat.entries[2].content, " Approved");
-    assert!(matches!(session.turn_state, agntos_settings::session::TurnState::Completed));
+    assert!(matches!(
+        session.turn_state,
+        agntos_settings::session::TurnState::Completed
+    ));
 
     *done.lock().unwrap() = true;
     server.join().unwrap();

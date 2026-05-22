@@ -31,7 +31,11 @@ fn to_qml_chat_entry(e: &crate::models::chat_model::ChatEntry) -> ChatEntry {
         content: e.content.clone(),
         tool_name: e.tool_name.as_deref().unwrap_or("").to_string(),
         tool_id: e.tool_id.as_deref().unwrap_or("").to_string(),
-        tool_args: e.tool_args.as_ref().map(|v| v.to_string()).unwrap_or_default(),
+        tool_args: e
+            .tool_args
+            .as_ref()
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
         tool_status: e.tool_status.as_deref().unwrap_or("").to_string(),
         tool_success: e.tool_success.unwrap_or(false),
         proposal_id: e.proposal_id.as_deref().unwrap_or("").to_string(),
@@ -73,35 +77,80 @@ use qmetaobject::listmodel::SimpleListModel;
 pub type ChatModel = SimpleListModel<ChatEntry>;
 
 fn make_proposal_list(proposals: &[Proposal]) -> QVariantList {
-    proposals.iter().map(|p| {
-        let mut m = QVariantMap::default();
-        m.insert(QString::from("proposalId"), QVariant::from(QString::from(p.proposal_id.as_str())));
-        m.insert(QString::from("summary"), QVariant::from(QString::from(p.summary.as_str())));
-        m.insert(QString::from("nixChanges"), QVariant::from(QString::from(p.nix_changes.as_str())));
-        m.insert(QString::from("rollbackGuidance"), QVariant::from(QString::from(p.rollback_guidance.as_str())));
-        let status = match &p.status {
-            ProposalStatus::Pending => "pending",
-            ProposalStatus::Applied => "applied",
-            ProposalStatus::Dismissed => "dismissed",
-        };
-        m.insert(QString::from("status"), QVariant::from(QString::from(status)));
-        m.insert(QString::from("createdAt"), QVariant::from(QString::from(p.created_at.as_str())));
-        QVariant::from(m)
-    }).collect()
+    proposals
+        .iter()
+        .map(|p| {
+            let mut m = QVariantMap::default();
+            m.insert(
+                QString::from("proposalId"),
+                QVariant::from(QString::from(p.proposal_id.as_str())),
+            );
+            m.insert(
+                QString::from("summary"),
+                QVariant::from(QString::from(p.summary.as_str())),
+            );
+            m.insert(
+                QString::from("nixChanges"),
+                QVariant::from(QString::from(p.nix_changes.as_str())),
+            );
+            m.insert(
+                QString::from("rollbackGuidance"),
+                QVariant::from(QString::from(p.rollback_guidance.as_str())),
+            );
+            let status = match &p.status {
+                ProposalStatus::Pending => "pending",
+                ProposalStatus::Applied => "applied",
+                ProposalStatus::Dismissed => "dismissed",
+            };
+            m.insert(
+                QString::from("status"),
+                QVariant::from(QString::from(status)),
+            );
+            m.insert(
+                QString::from("createdAt"),
+                QVariant::from(QString::from(p.created_at.as_str())),
+            );
+            QVariant::from(m)
+        })
+        .collect()
 }
 
 fn make_audit_list(entries: &[AuditEntry]) -> QVariantList {
-    entries.iter().map(|e| {
-        let mut m = QVariantMap::default();
-        m.insert(QString::from("auditId"), QVariant::from(QString::from(e.audit_id.as_str())));
-        m.insert(QString::from("timestamp"), QVariant::from(QString::from(e.timestamp.as_str())));
-        m.insert(QString::from("actionType"), QVariant::from(QString::from(e.action_type.as_str())));
-        m.insert(QString::from("summary"), QVariant::from(QString::from(e.summary.as_str())));
-        m.insert(QString::from("status"), QVariant::from(QString::from(e.status.as_str())));
-        m.insert(QString::from("prompt"), QVariant::from(QString::from(e.prompt.as_str())));
-        m.insert(QString::from("actor"), QVariant::from(QString::from(e.actor.as_str())));
-        QVariant::from(m)
-    }).collect()
+    entries
+        .iter()
+        .map(|e| {
+            let mut m = QVariantMap::default();
+            m.insert(
+                QString::from("auditId"),
+                QVariant::from(QString::from(e.audit_id.as_str())),
+            );
+            m.insert(
+                QString::from("timestamp"),
+                QVariant::from(QString::from(e.timestamp.as_str())),
+            );
+            m.insert(
+                QString::from("actionType"),
+                QVariant::from(QString::from(e.action_type.as_str())),
+            );
+            m.insert(
+                QString::from("summary"),
+                QVariant::from(QString::from(e.summary.as_str())),
+            );
+            m.insert(
+                QString::from("status"),
+                QVariant::from(QString::from(e.status.as_str())),
+            );
+            m.insert(
+                QString::from("prompt"),
+                QVariant::from(QString::from(e.prompt.as_str())),
+            );
+            m.insert(
+                QString::from("actor"),
+                QVariant::from(QString::from(e.actor.as_str())),
+            );
+            QVariant::from(m)
+        })
+        .collect()
 }
 
 // ── AppBridge ───────────────────────────────────────────────────────────────
@@ -213,8 +262,11 @@ pub struct AppBridge {
                     Ok(c) => c,
                     Err(e) => {
                         let mut s = session.lock().unwrap();
-                        s.chat.add_assistant_text(&format!("Connection error: {}", e));
-                        s.turn_state = TurnState::Error { message: e.to_string() };
+                        s.chat
+                            .add_assistant_text(&format!("Connection error: {}", e));
+                        s.turn_state = TurnState::Error {
+                            message: e.to_string(),
+                        };
                         change_cnt.fetch_add(1, Ordering::SeqCst);
                         is_proc.store(false, Ordering::SeqCst);
                         return;
@@ -223,7 +275,9 @@ pub struct AppBridge {
                 if conn.handshake(None).is_err() {
                     let mut s = session.lock().unwrap();
                     s.chat.add_assistant_text("Failed to connect to agent.");
-                    s.turn_state = TurnState::Error { message: "handshake failed".to_string() };
+                    s.turn_state = TurnState::Error {
+                        message: "handshake failed".to_string(),
+                    };
                     change_cnt.fetch_add(1, Ordering::SeqCst);
                     is_proc.store(false, Ordering::SeqCst);
                     return;
@@ -232,7 +286,9 @@ pub struct AppBridge {
                 if conn.send(&msg).is_err() {
                     let mut s = session.lock().unwrap();
                     s.chat.add_assistant_text("Failed to send message.");
-                    s.turn_state = TurnState::Error { message: "send failed".to_string() };
+                    s.turn_state = TurnState::Error {
+                        message: "send failed".to_string(),
+                    };
                     change_cnt.fetch_add(1, Ordering::SeqCst);
                     is_proc.store(false, Ordering::SeqCst);
                     return;
@@ -243,7 +299,12 @@ pub struct AppBridge {
                     let mut rc = reader_conn;
                     AppBridge::read_chat_responses_thread(&mut rc, &session, &change_cnt, &is_proc);
                 } else {
-                    AppBridge::read_chat_responses_thread(&mut conn, &session, &change_cnt, &is_proc);
+                    AppBridge::read_chat_responses_thread(
+                        &mut conn,
+                        &session,
+                        &change_cnt,
+                        &is_proc,
+                    );
                 }
             });
         }
@@ -252,7 +313,10 @@ pub struct AppBridge {
     pub refresh_proposals: qt_method!(
         pub fn refresh_proposals(&mut self) {
             if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
-                conn.send(&ClientMessage::Status { target: "proposals".to_string() }).ok();
+                conn.send(&ClientMessage::Status {
+                    target: "proposals".to_string(),
+                })
+                .ok();
                 return;
             }
             // Fallback: try to load from session if connected
@@ -265,14 +329,20 @@ pub struct AppBridge {
     pub refresh_status: qt_method!(
         pub fn refresh_status(&mut self) {
             if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
-                conn.send(&ClientMessage::Status { target: "system".to_string() }).ok();
+                conn.send(&ClientMessage::Status {
+                    target: "system".to_string(),
+                })
+                .ok();
             } else {
                 let mut conn = match Connection::connect(&self.socket_path) {
                     Ok(c) => c,
                     Err(_) => return,
                 };
                 conn.handshake(None).ok();
-                conn.send(&ClientMessage::Status { target: "system".to_string() }).ok();
+                conn.send(&ClientMessage::Status {
+                    target: "system".to_string(),
+                })
+                .ok();
             }
         }
     ),
@@ -280,14 +350,20 @@ pub struct AppBridge {
     pub approve_proposal: qt_method!(
         pub fn approve_proposal(&mut self, proposal_id: QString) {
             if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
-                conn.send(&ClientMessage::Approve { proposal_id: proposal_id.to_string() }).ok();
+                conn.send(&ClientMessage::Approve {
+                    proposal_id: proposal_id.to_string(),
+                })
+                .ok();
             } else {
                 let mut conn = match Connection::connect(&self.socket_path) {
                     Ok(c) => c,
                     Err(_) => return,
                 };
                 conn.handshake(None).ok();
-                conn.send(&ClientMessage::Approve { proposal_id: proposal_id.to_string() }).ok();
+                conn.send(&ClientMessage::Approve {
+                    proposal_id: proposal_id.to_string(),
+                })
+                .ok();
             }
         }
     ),
@@ -298,7 +374,8 @@ pub struct AppBridge {
                 conn.send(&ClientMessage::Dismiss {
                     proposal_id: proposal_id.to_string(),
                     reason: Some("User dismissed from GUI".to_string()),
-                }).ok();
+                })
+                .ok();
             } else {
                 let mut conn = match Connection::connect(&self.socket_path) {
                     Ok(c) => c,
@@ -308,7 +385,8 @@ pub struct AppBridge {
                 conn.send(&ClientMessage::Dismiss {
                     proposal_id: proposal_id.to_string(),
                     reason: Some("User dismissed from GUI".to_string()),
-                }).ok();
+                })
+                .ok();
             }
         }
     ),
@@ -317,8 +395,12 @@ pub struct AppBridge {
         pub fn load_audit(&mut self, limit: i32) {
             if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
                 conn.send(&ClientMessage::Audit {
-                    action: AuditRequestAction::List, query: None, id: None, limit: limit as u32,
-                }).ok();
+                    action: AuditRequestAction::List,
+                    query: None,
+                    id: None,
+                    limit: limit as u32,
+                })
+                .ok();
             } else {
                 let mut conn = match Connection::connect(&self.socket_path) {
                     Ok(c) => c,
@@ -326,8 +408,12 @@ pub struct AppBridge {
                 };
                 conn.handshake(None).ok();
                 conn.send(&ClientMessage::Audit {
-                    action: AuditRequestAction::List, query: None, id: None, limit: limit as u32,
-                }).ok();
+                    action: AuditRequestAction::List,
+                    query: None,
+                    id: None,
+                    limit: limit as u32,
+                })
+                .ok();
             }
         }
     ),
@@ -339,7 +425,9 @@ pub struct AppBridge {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_millis() as u64)
                     .unwrap_or(0);
-                if now >= self.backoff_until_ms { self.connect_to_agent(); }
+                if now >= self.backoff_until_ms {
+                    self.connect_to_agent();
+                }
             }
 
             let proc_val = self.is_processing_flag.load(Ordering::SeqCst);
@@ -363,8 +451,12 @@ pub struct AppBridge {
         pub fn search_audit(&mut self, query: QString) {
             if let Some(conn) = self.chat_connection.lock().unwrap().as_mut() {
                 conn.send(&ClientMessage::Audit {
-                    action: AuditRequestAction::Search, query: Some(query.to_string()), id: None, limit: 50,
-                }).ok();
+                    action: AuditRequestAction::Search,
+                    query: Some(query.to_string()),
+                    id: None,
+                    limit: 50,
+                })
+                .ok();
             } else {
                 let mut conn = match Connection::connect(&self.socket_path) {
                     Ok(c) => c,
@@ -372,8 +464,12 @@ pub struct AppBridge {
                 };
                 conn.handshake(None).ok();
                 conn.send(&ClientMessage::Audit {
-                    action: AuditRequestAction::Search, query: Some(query.to_string()), id: None, limit: 50,
-                }).ok();
+                    action: AuditRequestAction::Search,
+                    query: Some(query.to_string()),
+                    id: None,
+                    limit: 50,
+                })
+                .ok();
             }
         }
     ),
@@ -437,7 +533,10 @@ impl AppBridge {
                     let mut s = session.lock().unwrap();
                     s.handle_server_message(&msg);
                     change_cnt.fetch_add(1, Ordering::SeqCst);
-                    if matches!(msg, ServerMessage::TurnComplete { .. } | ServerMessage::Error { .. }) {
+                    if matches!(
+                        msg,
+                        ServerMessage::TurnComplete { .. } | ServerMessage::Error { .. }
+                    ) {
                         drop(s);
                         is_proc.store(false, Ordering::SeqCst);
                         break;
