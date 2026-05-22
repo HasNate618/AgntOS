@@ -64,27 +64,95 @@ pub fn fetch_openai_models(endpoint: &str, api_key: &str) -> Result<Vec<(String,
     Ok(models)
 }
 
+fn push_profile_models(
+    name: &str,
+    profile: &ModelProfile,
+    options: &mut Vec<serde_json::Value>,
+    models: &[(String, String)],
+) -> Vec<serde_json::Value> {
+    models
+        .iter()
+        .map(|(id, label)| {
+            options.push(serde_json::json!({
+                "provider": name,
+                "modelId": id,
+                "label": format!("{} · {}", name, label),
+                "value": format!("{}/{}", name, id),
+            }));
+            serde_json::json!({ "id": id, "name": label })
+        })
+        .collect()
+}
+
+fn fallback_models(profile: &ModelProfile) -> Vec<(String, String)> {
+    if profile.model.is_empty() {
+        return Vec::new();
+    }
+    vec![(profile.model.clone(), profile.model.clone())]
+}
+
+pub fn initial_pi_model(cfg: &ModelsConfig) -> Option<String> {
+    let (provider, profile) = cfg.chat_selection();
+    if !profile.model.is_empty() {
+        return Some(format!("{}/{}", provider, profile.model));
+    }
+    let api_key = api_key_for(profile);
+    if let Ok(models) = fetch_openai_models(&profile.endpoint, &api_key) {
+        if let Some((id, _)) = models.first() {
+            return Some(format!("{}/{}", provider, id));
+        }
+    }
+    let fallbacks = fallback_models(profile);
+    fallbacks
+        .first()
+        .map(|(id, _)| format!("{}/{}", provider, id))
+}
+
 pub fn build_catalog(cfg: &ModelsConfig) -> serde_json::Value {
     let mut providers = Vec::new();
     let mut options = Vec::new();
+    let (sel_provider, sel_profile) = cfg.chat_selection();
+    let selected = if sel_profile.model.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::json!({
+            "provider": sel_provider,
+            "modelId": sel_profile.model,
+            "value": format!("{}/{}", sel_provider, sel_profile.model),
+        })
+    };
 
-    for (name, profile) in cfg.named_profiles() {
+    for (name, profile) in cfg.catalog_profiles() {
         let api_key = api_key_for(profile);
         let probe = fetch_openai_models(&profile.endpoint, &api_key);
         let models = match probe {
-            Ok(list) => list
-                .into_iter()
-                .map(|(id, label)| {
-                    options.push(serde_json::json!({
-                        "provider": name,
-                        "modelId": id,
-                        "label": format!("{} · {}", name, label),
-                        "value": format!("{}/{}", name, id),
+            Ok(list) if !list.is_empty() => push_profile_models(name, profile, &mut options, &list),
+            Ok(_) => {
+                let fallbacks = fallback_models(profile);
+                if fallbacks.is_empty() {
+                    providers.push(serde_json::json!({
+                        "id": name,
+                        "endpoint": profile.endpoint,
+                        "error": "No models returned from endpoint",
+                        "models": [],
                     }));
-                    serde_json::json!({ "id": id, "name": label })
-                })
-                .collect::<Vec<_>>(),
+                    continue;
+                }
+                push_profile_models(name, profile, &mut options, &fallbacks)
+            }
             Err(e) => {
+                let fallbacks = fallback_models(profile);
+                if !fallbacks.is_empty() {
+                    let entries =
+                        push_profile_models(name, profile, &mut options, &fallbacks);
+                    providers.push(serde_json::json!({
+                        "id": name,
+                        "endpoint": profile.endpoint,
+                        "error": e,
+                        "models": entries,
+                    }));
+                    continue;
+                }
                 providers.push(serde_json::json!({
                     "id": name,
                     "endpoint": profile.endpoint,
@@ -101,13 +169,17 @@ pub fn build_catalog(cfg: &ModelsConfig) -> serde_json::Value {
         }));
     }
 
-    serde_json::json!({ "providers": providers, "options": options })
+    serde_json::json!({
+        "providers": providers,
+        "options": options,
+        "selected": selected,
+    })
 }
 
 pub fn write_pi_models_json(cfg: &ModelsConfig, agent_dir: &std::path::Path) -> Result<(), String> {
     let mut providers = serde_json::Map::new();
 
-    for (name, profile) in cfg.named_profiles() {
+    for (name, profile) in cfg.catalog_profiles() {
         let api_key = api_key_for(profile);
         let models = fetch_openai_models(&profile.endpoint, &api_key).unwrap_or_default();
         if models.is_empty() && !profile.model.is_empty() {

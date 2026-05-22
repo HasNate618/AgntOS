@@ -168,6 +168,24 @@ impl ModelsConfig {
         out.extend(extra);
         out
     }
+
+    pub fn catalog_profiles(&self) -> Vec<(&str, &ModelProfile)> {
+        if !self.profiles.is_empty() {
+            let mut out: Vec<(&str, &ModelProfile)> =
+                self.profiles.iter().map(|(k, v)| (k.as_str(), v)).collect();
+            out.sort_by(|a, b| a.0.cmp(b.0));
+            return out;
+        }
+        if let Some((name, profile)) = self.profile_for_task("chat") {
+            return vec![(name, profile)];
+        }
+        vec![("default", &self.default)]
+    }
+
+    pub fn chat_selection(&self) -> (&str, &ModelProfile) {
+        self.profile_for_task("chat")
+            .unwrap_or(("default", &self.default))
+    }
 }
 
 #[cfg(test)]
@@ -235,5 +253,27 @@ inspect = "fast"
         let again = ModelsConfig::from_toml_str(&out).unwrap();
         assert_eq!(again.routing.get("inspect").unwrap(), "fast");
         assert!(again.profiles.contains_key("fast"));
+    }
+
+    #[test]
+    fn catalog_profiles_skips_default_when_profiles_exist() {
+        let input = r#"
+[default]
+endpoint = "https://api.example.com/v1"
+model = "gpt-4o-mini"
+
+[profiles.gateway]
+endpoint = "http://10.0.0.45/bifrost/v1"
+model = "test-model"
+
+[routing]
+chat = "gateway"
+"#;
+        let cfg = ModelsConfig::from_toml_str(input).unwrap();
+        let names: Vec<_> = cfg.catalog_profiles().into_iter().map(|(n, _)| n).collect();
+        assert_eq!(names, vec!["gateway"]);
+        let (p, prof) = cfg.chat_selection();
+        assert_eq!(p, "gateway");
+        assert_eq!(prof.model, "test-model");
     }
 }

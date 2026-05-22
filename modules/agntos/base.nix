@@ -91,16 +91,21 @@ in
         # Pick concrete models in the Control Centre chat dropdown.
 
         [default]
-        endpoint = "https://api.example.com/v1"
+        endpoint = "http://127.0.0.1:8081/v1"
         model = ""
         api_key_env = "AGNTOS_API_KEY"
 
+        [profiles.gateway]
+        endpoint = "http://10.0.0.45/bifrost/v1"
+        api_key_env = "AGNTOS_API_KEY"
+        model = ""
+
         [routing]
-        chat = "default"
-        inspect = "default"
-        propose = "default"
-        apply = "default"
-        memory = "default"
+        chat = "gateway"
+        inspect = "gateway"
+        propose = "gateway"
+        apply = "gateway"
+        memory = "gateway"
       '';
 
       system.activationScripts.agntos-models = lib.stringAfter ["etc"] ''

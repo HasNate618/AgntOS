@@ -249,14 +249,17 @@ impl PiBridge {
             cmd.env("PATH", format!("{}:{}", dir, current_path));
         }
 
-        let default_model = config.default_model.clone().unwrap_or_else(|| {
-            if config.llm_base_url.is_empty() {
-                "default".into()
-            } else {
-                "local-llama/Llama Server".into()
+        let default_model = ModelsConfig::from_path(&config.model_config_path)
+            .ok()
+            .and_then(|cfg| crate::model_catalog::initial_pi_model(&cfg))
+            .or(config.default_model.clone());
+        if let Some(ref model) = default_model {
+            if !model.is_empty() && model.contains('/') {
+                cmd.arg("--model").arg(model);
             }
-        });
-        cmd.arg("--model").arg(&default_model);
+        } else if !config.llm_base_url.is_empty() {
+            cmd.arg("--model").arg("local-llama/Llama Server");
+        }
 
         let mut child = cmd.spawn()?;
 
@@ -270,18 +273,17 @@ impl PiBridge {
             let reader = tokio::io::BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if !line.trim().is_empty() {
-                    tracing::warn!("pi stderr: {}", line);
-                    let mut s = status_stderr.lock().await;
-                    s.error = Some(line);
+                if line.trim().is_empty() {
+                    continue;
                 }
+                tracing::warn!("pi stderr: {}", line);
             }
         });
 
         *process.lock().await = Some(PiProcess { child, stdin });
         *status.lock().await = ConnectionStatus {
             connected: true,
-            model: config.default_model.clone(),
+            model: default_model.clone(),
             state: "idle".into(),
             error: None,
         };

@@ -86,8 +86,11 @@ impl AppConfig {
             let parsed: toml::Value = content.parse::<toml::Value>()?;
 
             if let Ok(cfg) = agnt_common::models::ModelsConfig::from_toml_str(&content) {
-                if !cfg.default.model.is_empty() {
-                    config.default_model = Some(format!("default/{}", cfg.default.model));
+                if let Some(model) = crate::model_catalog::initial_pi_model(&cfg) {
+                    config.default_model = Some(model);
+                } else if !cfg.default.model.is_empty() {
+                    let (provider, _) = cfg.chat_selection();
+                    config.default_model = Some(format!("{}/{}", provider, cfg.default.model));
                 }
             }
 
