@@ -49,6 +49,7 @@ dependencies = [
 name = "agntos-cc"
 version = "0.1.0"
 dependencies = [
+ "agnt-common",
  "serde",
  "serde_json",
  "tauri",
