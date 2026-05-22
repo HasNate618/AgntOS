@@ -14,8 +14,13 @@ pub fn run() {
         .init();
 
     let config = AppConfig::load().unwrap_or_default();
+    std::env::set_var(
+        "AGNTOS_CONFIG_DIR",
+        config.config_dir.to_string_lossy().as_ref(),
+    );
     tracing::info!(
-        "Config: pi={}, prompt={}, extension={}",
+        "Config: dir={}, pi={}, prompt={}, extension={}",
+        config.config_dir.display(),
         config.pi_binary,
         config.system_prompt_path.display(),
         config.extension_path.display()
@@ -70,6 +75,13 @@ pub fn run() {
             agntos_cc::commands::apply_proposal,
             agntos_cc::commands::list_audit_entries,
             agntos_cc::commands::rollback_to,
+            agntos_cc::commands::list_sessions,
+            agntos_cc::commands::get_models_config,
+            agntos_cc::commands::add_model_provider,
+            agntos_cc::commands::remove_model_profile,
+            agntos_cc::commands::list_model_catalog,
+            agntos_cc::commands::probe_provider_models,
+            agntos_cc::commands::set_chat_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgntOS Control Centre");

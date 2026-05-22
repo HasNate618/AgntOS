@@ -70,37 +70,45 @@ in
 
   config = lib.mkIf config.agntos.enable (lib.mkMerge [
     {
+      users.groups.agntos = { };
+
       # Create AgntOS config directory tree
       systemd.tmpfiles.rules = [
         "d ${config.agntos.configDir} 0755 root root -"
         "d ${config.agntos.configDir}/packages 0755 root root -"
         "d ${config.agntos.configDir}/options 0755 root root -"
-        "d ${config.agntos.configDir}/proposals 0755 root root -"
+        "d ${config.agntos.configDir}/proposals 0775 root agntos -"
         "d ${config.agntos.configDir}/services 0755 root root -"
         "d ${config.agntos.configDir}/home 0755 root root -"
-        "d ${config.agntos.configDir}/memory 0755 root root -"
-        "f ${config.agntos.configDir}/memory/MEMORY.md 0644 root root -"
-        "f ${config.agntos.configDir}/memory/USER.md 0644 root root -"
+        "d ${config.agntos.configDir}/memory 0775 root agntos -"
+        "f ${config.agntos.configDir}/memory/MEMORY.md 0664 root agntos -"
+        "f ${config.agntos.configDir}/memory/USER.md 0664 root agntos -"
+        "f ${config.agntos.configDir}/models.toml 0664 root agntos -"
       ];
 
       environment.etc."agntos/models.toml.example".text = ''
-        # AgntOS model routing configuration
-        # Copy to /etc/agntos/models.toml and adjust to your endpoint(s).
-        # No default endpoint is assumed by AgntOS.
+        # AgntOS model routing — copy to models.toml and set your endpoints.
+        # Pick concrete models in the Control Centre chat dropdown.
 
         [default]
         endpoint = "https://api.example.com/v1"
-        model = "your-model-name"
+        model = ""
         api_key_env = "AGNTOS_API_KEY"
-        max_tokens = 4096
-        temperature = 0.7
 
         [routing]
+        chat = "default"
         inspect = "default"
         propose = "default"
         apply = "default"
-        chat = "default"
         memory = "default"
+      '';
+
+      system.activationScripts.agntos-models = lib.stringAfter ["etc"] ''
+        if [ ! -s /etc/agntos/models.toml ]; then
+          cp /etc/agntos/models.toml.example /etc/agntos/models.toml
+        fi
+        chmod 664 /etc/agntos/models.toml
+        chown root:agntos /etc/agntos/models.toml
       '';
 
       environment.systemPackages = with pkgs; [

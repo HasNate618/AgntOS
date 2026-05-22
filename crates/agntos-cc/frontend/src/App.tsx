@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { TauriProvider, useAgentStore } from "@/hooks/TauriProvider";
+import AgntLogo from "@/components/AgntLogo";
 import Sidebar from "@/components/Sidebar";
 import ChatPage from "@/components/ChatPage";
 import StatusPage from "@/components/StatusPage";
 import ProposalsPage from "@/components/ProposalsPage";
 import ActivityPage from "@/components/ActivityPage";
+import ModelsPage from "@/components/ModelsPage";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Page } from "@/lib/types";
 
@@ -15,6 +17,7 @@ function TopBar() {
   return (
     <header className="flex items-center h-12 px-5 shrink-0 border-b border-border bg-card/50 backdrop-blur-sm">
       <div className="flex items-center gap-2.5">
+        <AgntLogo size={24} />
         <span
           className="text-base font-bold tracking-tight text-foreground"
           style={{ fontFamily: "var(--font-display)" }}
@@ -57,6 +60,8 @@ function PageContent({ page }: { page: Page }) {
       return <ProposalsPage />;
     case "activity":
       return <ActivityPage />;
+    case "models":
+      return <ModelsPage />;
   }
 }
 

@@ -4,15 +4,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import AgntLogo from "@/components/AgntLogo";
 import {
   MessageSquare,
   Activity,
   FileText,
   Clock,
-  Hexagon,
-  Settings,
+  Cpu,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -25,13 +24,14 @@ const navItems: { id: Page; label: string; icon: typeof MessageSquare }[] = [
   { id: "status", label: "Status", icon: Activity },
   { id: "proposals", label: "Proposals", icon: FileText },
   { id: "activity", label: "Activity", icon: Clock },
+  { id: "models", label: "Models", icon: Cpu },
 ];
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   return (
     <nav className="w-[52px] flex flex-col items-center py-3 gap-0.5 shrink-0 bg-sidebar border-r border-sidebar-border">
       <div className="mb-3 flex items-center justify-center w-9 h-9">
-        <Hexagon className="w-6 h-6 text-sidebar-primary fill-sidebar-primary/20" strokeWidth={1.5} />
+        <AgntLogo size={26} />
       </div>
 
       {navItems.map((item) => {
@@ -61,23 +61,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
       })}
 
       <div className="flex-1" />
-
-      <Separator className="w-7 my-1 bg-sidebar-border" />
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
-            disabled
-          >
-            <Settings className="w-[18px] h-[18px]" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right" className="text-xs">
-          Settings (soon)
-        </TooltipContent>
-      </Tooltip>
     </nav>
   );
 }

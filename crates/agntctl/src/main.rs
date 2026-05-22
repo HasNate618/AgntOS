@@ -488,10 +488,19 @@ fn main() {
                 "add" => {
                     let name = profile.as_deref();
                     let ep = endpoint.as_deref();
-                    let mdl = model.as_deref();
-                    match (name, ep, mdl) {
-                        (Some(n), Some(e), Some(m)) => model::execute_add(n, e, m, api_key_env.as_deref(), max_tokens, temperature, config_dir.as_ref()),
-                        _ => Err("Usage: agntctl model add <name> --endpoint <url> --model <name>".to_string()),
+                    match (name, ep) {
+                        (Some(n), Some(e)) => model::execute_add(
+                            n,
+                            e,
+                            model.as_deref(),
+                            api_key_env.as_deref(),
+                            max_tokens,
+                            temperature,
+                            config_dir.as_ref(),
+                        ),
+                        _ => Err(
+                            "Usage: agntctl model add <name> --endpoint <url> [--model <id>]".to_string(),
+                        ),
                     }
                 }
                 "remove" => {

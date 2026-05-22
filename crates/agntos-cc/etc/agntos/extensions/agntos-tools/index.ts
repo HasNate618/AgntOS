@@ -3,7 +3,7 @@ import { Type } from "typebox";
 import { execSync } from "node:child_process";
 
 const AGNTCTL = process.env.AGNTCTL_PATH || "agntctl";
-const CONFIG_DIR = "/etc/agntos";
+const CONFIG_DIR = process.env.AGNTOS_CONFIG_DIR || "/etc/agntos";
 
 function quote(a: string) {
   return a.includes(' ') ? `"${a}"` : a;

@@ -1,6 +1,9 @@
+import { useCallback, useState } from "react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { AgntRuntimeProvider } from "@/hooks/AgntRuntimeProvider";
 import { useAgentStore } from "@/hooks/TauriProvider";
+import AgntLogo from "@/components/AgntLogo";
+import ThreadList, { type PiSession } from "@/components/ThreadList";
 import { Badge } from "@/components/ui/badge";
 
 function ChatChrome() {
@@ -8,15 +11,14 @@ function ChatChrome() {
   const { connection } = state;
 
   return (
-    <header className="flex items-center h-11 px-4 shrink-0 border-b border-border bg-background/80 backdrop-blur-sm">
+    <header className="flex items-center h-11 px-4 shrink-0 border-b border-border bg-background/80 backdrop-blur-sm gap-2">
+      <AgntLogo size={22} />
       <span
         className="text-sm font-semibold tracking-tight"
         style={{ fontFamily: "var(--font-display)" }}
       >
-        AgntOS
+        Agent
       </span>
-      <span className="text-muted-foreground text-xs mx-2">·</span>
-      <span className="text-xs text-muted-foreground">Agent</span>
       <div className="flex-1" />
       <Badge
         variant="outline"
@@ -43,14 +45,53 @@ function ChatChrome() {
 }
 
 export default function ChatPage() {
+  const [sessionKey, setSessionKey] = useState("initial");
+  const [activePath, setActivePath] = useState<string | null>(null);
+  const [listCollapsed, setListCollapsed] = useState(false);
+
+  const onNewSession = useCallback(async () => {
+    if (window.__TAURI__) {
+      try {
+        await window.__TAURI__.core.invoke("new_session");
+      } catch {
+        // ignore
+      }
+    }
+    setActivePath(null);
+    setSessionKey(`new-${Date.now()}`);
+  }, []);
+
+  const onSelectSession = useCallback(async (session: PiSession) => {
+    if (window.__TAURI__) {
+      try {
+        await window.__TAURI__.core.invoke("switch_session", {
+          session_path: session.path,
+        });
+      } catch {
+        // ignore
+      }
+    }
+    setActivePath(session.path);
+    setSessionKey(session.path);
+  }, []);
+
   return (
-    <AgntRuntimeProvider>
-      <div className="flex h-full flex-col">
-        <ChatChrome />
-        <div className="flex-1 min-h-0">
-          <Thread />
+    <div className="flex h-full min-h-0">
+      <ThreadList
+        activePath={activePath}
+        collapsed={listCollapsed}
+        onCollapsedChange={setListCollapsed}
+        onSelect={onSelectSession}
+        onNew={onNewSession}
+      />
+      <AgntRuntimeProvider key={sessionKey}>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <ChatChrome />
+          <div className="min-h-0 flex-1">
+            <Thread />
+          </div>
         </div>
-      </div>
-    </AgntRuntimeProvider>
+      </AgntRuntimeProvider>
+    </div>
   );
 }

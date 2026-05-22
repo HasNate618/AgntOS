@@ -164,25 +164,15 @@ export function AgntRuntimeProvider({ children }: { children: ReactNode }) {
         case "text_delta": {
           const delta = msgEvent.delta as string | undefined;
           if (!delta) break;
+          patchAssistant((parts) =>
+            upsertPart(parts, "text", (existing) => ({
+              type: "text",
+              text:
+                existing?.type === "text" ? existing.text + delta : delta,
+            })),
+          );
           if (!hasToolCallsRef.current) {
-            patchAssistant((parts) =>
-              upsertPart(parts, "reasoning", (existing) => ({
-                type: "reasoning",
-                text:
-                  existing?.type === "reasoning"
-                    ? existing.text + delta
-                    : delta,
-              })),
-            );
             intentBufferRef.current += delta;
-          } else {
-            patchAssistant((parts) =>
-              upsertPart(parts, "text", (existing) => ({
-                type: "text",
-                text:
-                  existing?.type === "text" ? existing.text + delta : delta,
-              })),
-            );
           }
           break;
         }

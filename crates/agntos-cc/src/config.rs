@@ -16,6 +16,7 @@ fn config_dir() -> PathBuf {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    pub config_dir: PathBuf,
     pub pi_binary: String,
     pub system_prompt_path: PathBuf,
     pub extension_path_dir: PathBuf,
@@ -32,6 +33,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         let base = config_dir();
         Self {
+            config_dir: base.clone(),
             pi_binary: "pi".into(),
             system_prompt_path: base.join("AGENTS.md"),
             extension_path_dir: base.join("extensions/agntos-tools"),

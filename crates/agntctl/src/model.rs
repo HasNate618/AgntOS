@@ -101,7 +101,7 @@ pub fn execute_route(
 pub fn execute_add(
     name: &str,
     endpoint: &str,
-    model: &str,
+    model: Option<&str>,
     api_key_env: Option<&str>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
@@ -123,7 +123,7 @@ pub fn execute_add(
 
     let profile = ModelProfile {
         endpoint: endpoint.to_string(),
-        model: model.to_string(),
+        model: model.unwrap_or("").to_string(),
         api_key_env: api_key_env.map(|s| s.to_string()),
         max_tokens: max_tokens.unwrap_or(4096),
         temperature: temperature.unwrap_or(0.7),
@@ -131,15 +131,21 @@ pub fn execute_add(
 
     cfg.profiles.insert(name.to_string(), profile);
 
-    let toml_str =
-        toml::to_string_pretty(&cfg).map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let toml_str = cfg
+        .to_toml_string()
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     std::fs::write(&path, &toml_str)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
 
+    let model_note = if model.unwrap_or("").is_empty() {
+        "(pick in chat)"
+    } else {
+        model.unwrap_or("")
+    };
     Ok(format!(
         "Profile '{}' added (endpoint={}, model={})",
-        name, endpoint, model
+        name, endpoint, model_note
     ))
 }
 
@@ -158,8 +164,9 @@ pub fn execute_remove(name: &str, config_dir: Option<&PathBuf>) -> Result<String
     cfg.profiles.remove(name);
     cfg.routing.retain(|_, v| v != name);
 
-    let toml_str =
-        toml::to_string_pretty(&cfg).map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let toml_str = cfg
+        .to_toml_string()
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     std::fs::write(&path, &toml_str)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
@@ -186,8 +193,9 @@ pub fn execute_set_route(
 
     cfg.routing.insert(task.to_string(), profile.to_string());
 
-    let toml_str =
-        toml::to_string_pretty(&cfg).map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let toml_str = cfg
+        .to_toml_string()
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     std::fs::write(&path, &toml_str)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
@@ -381,7 +389,7 @@ temperature = 0.7
         let out = execute_add(
             "fast",
             "http://127.0.0.1:11434/v1",
-            "tiny-model",
+            Some("tiny-model"),
             None,
             None,
             None,

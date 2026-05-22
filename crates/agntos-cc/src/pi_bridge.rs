@@ -1,3 +1,4 @@
+use agnt_common::models::ModelsConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -102,6 +103,38 @@ fn pi_agent_dir() -> PathBuf {
     }
 }
 
+fn write_pi_models_json(agent_dir: &Path, config: &crate::config::AppConfig) {
+    if let Ok(cfg) = ModelsConfig::from_path(&config.model_config_path) {
+        let _ = crate::model_catalog::write_pi_models_json(&cfg, agent_dir);
+        return;
+    }
+    if config.llm_base_url.is_empty() {
+        return;
+    }
+    let fallback = serde_json::json!({
+        "providers": {
+            "local-llama": {
+                "baseUrl": config.llm_base_url,
+                "api": "openai-completions",
+                "apiKey": "not-needed",
+                "models": [{
+                    "id": "Llama Server",
+                    "name": "Llama Server",
+                    "reasoning": true,
+                    "input": ["text"],
+                    "contextWindow": 131072,
+                    "maxTokens": 8192,
+                    "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+                }]
+            }
+        }
+    });
+    let _ = std::fs::write(
+        agent_dir.join("models.json"),
+        serde_json::to_string_pretty(&fallback).unwrap_or_default(),
+    );
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum PiCommand {
@@ -176,30 +209,7 @@ impl PiBridge {
         // Write Pi models.json with custom provider config
         let agent_dir = pi_agent_dir();
         std::fs::create_dir_all(&agent_dir).ok();
-        let models_json = serde_json::json!({
-            "providers": {
-                "local-llama": {
-                    "baseUrl": config.llm_base_url,
-                    "api": "openai-completions",
-                    "apiKey": "not-needed",
-                    "models": [
-                        {
-                            "id": "Llama Server",
-                            "name": "Llama Server",
-                            "reasoning": true,
-                            "input": ["text", "image"],
-                            "contextWindow": 131072,
-                            "maxTokens": 8192,
-                            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
-                        }
-                    ]
-                }
-            }
-        });
-        let _ = std::fs::write(
-            agent_dir.join("models.json"),
-            serde_json::to_string_pretty(&models_json).unwrap(),
-        );
+        write_pi_models_json(&agent_dir, &config);
 
         let mut cmd = tokio::process::Command::new(&config.pi_binary);
         cmd.arg("--mode")
@@ -219,6 +229,10 @@ impl PiBridge {
         // Resolve agntctl and pass absolute path to Pi extension
         let agntctl_path = resolve_agntctl(&config);
         cmd.env("AGNTCTL_PATH", &agntctl_path);
+        cmd.env(
+            "AGNTOS_CONFIG_DIR",
+            config.config_dir.to_string_lossy().as_ref(),
+        );
 
         // Also ensure agntctl's directory is on PATH for the subprocess
         let agntctl_dir = Path::new(&agntctl_path).parent().and_then(|p| {
@@ -233,7 +247,14 @@ impl PiBridge {
             cmd.env("PATH", format!("{}:{}", dir, current_path));
         }
 
-        cmd.arg("--model").arg("local-llama/Llama Server");
+        let default_model = config.default_model.clone().unwrap_or_else(|| {
+            if config.llm_base_url.is_empty() {
+                "default".into()
+            } else {
+                "local-llama/Llama Server".into()
+            }
+        });
+        cmd.arg("--model").arg(&default_model);
 
         let mut child = cmd.spawn()?;
 

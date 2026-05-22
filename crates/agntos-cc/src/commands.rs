@@ -193,8 +193,15 @@ fn resolve_agntctl() -> String {
 }
 
 #[tauri::command]
+fn agntos_config_dir() -> std::path::PathBuf {
+    std::env::var("AGNTOS_CONFIG_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/etc/agntos"))
+}
+
+#[tauri::command]
 pub async fn list_proposals() -> Result<serde_json::Value, String> {
-    let proposals_dir = Path::new("/etc/agntos/proposals");
+    let proposals_dir = agntos_config_dir().join("proposals");
     if !proposals_dir.exists() {
         return Ok(serde_json::json!([]));
     }
@@ -244,7 +251,12 @@ pub async fn list_proposals() -> Result<serde_json::Value, String> {
 pub async fn apply_proposal(id: String) -> Result<String, String> {
     let agntctl = resolve_agntctl();
     let output = std::process::Command::new(&agntctl)
-        .args(["apply", "--config-dir", "/etc/agntos", &id])
+        .args([
+            "apply",
+            "--config-dir",
+            &agntos_config_dir().to_string_lossy(),
+            &id,
+        ])
         .output()
         .map_err(|e| format!("Failed to execute agntctl: {}", e))?;
     if output.status.success() {
@@ -265,6 +277,176 @@ pub async fn list_audit_entries(limit: Option<i32>) -> Result<serde_json::Value,
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         serde_json::from_str(&stdout).map_err(|e| format!("Failed to parse audit output: {}", e))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+fn pi_sessions_dir() -> std::path::PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        std::path::PathBuf::from(home).join(".pi/agent/sessions")
+    } else {
+        std::path::PathBuf::from("/root/.pi/agent/sessions")
+    }
+}
+
+fn config_dir_flag() -> Vec<String> {
+    let dir = std::env::var("AGNTOS_CONFIG_DIR").unwrap_or_else(|_| "/etc/agntos".into());
+    vec!["--config-dir".into(), dir]
+}
+
+#[tauri::command]
+pub async fn list_sessions() -> Result<serde_json::Value, String> {
+    let dir = pi_sessions_dir();
+    if !dir.exists() {
+        return Ok(serde_json::json!([]));
+    }
+    let mut sessions = Vec::new();
+    let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let meta = entry.metadata().map_err(|e| e.to_string())?;
+        let modified = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let title = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Session")
+            .to_string();
+        sessions.push(serde_json::json!({
+            "path": path.to_string_lossy(),
+            "title": title,
+            "modified": modified,
+        }));
+    }
+    sessions.sort_by(|a, b| {
+        b.get("modified")
+            .and_then(|v| v.as_u64())
+            .cmp(&a.get("modified").and_then(|v| v.as_u64()))
+    });
+    Ok(serde_json::json!(sessions))
+}
+
+#[tauri::command]
+pub async fn get_models_config() -> Result<serde_json::Value, String> {
+    let agntctl = resolve_agntctl();
+    let mut args = vec!["model".into(), "list".into(), "--json".into()];
+    args.extend(config_dir_flag());
+    let output = std::process::Command::new(&agntctl)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute agntctl: {}", e))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(&stdout).map_err(|e| format!("Failed to parse models config: {}", e))
+}
+
+#[tauri::command]
+pub async fn add_model_provider(
+    name: String,
+    endpoint: String,
+    api_key_env: Option<String>,
+) -> Result<String, String> {
+    let agntctl = resolve_agntctl();
+    let mut args = vec![
+        "model".into(),
+        "add".into(),
+        name,
+        "--endpoint".into(),
+        endpoint,
+    ];
+    if let Some(env) = api_key_env {
+        args.push("--api-key-env".into());
+        args.push(env);
+    }
+    args.extend(config_dir_flag());
+    let output = std::process::Command::new(&agntctl)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute agntctl: {}", e))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    let path = crate::model_catalog::models_path();
+    if let Ok(cfg) = agnt_common::models::ModelsConfig::from_path(&path) {
+        let agent_dir = pi_agent_dir();
+        let _ = std::fs::create_dir_all(&agent_dir);
+        let _ = crate::model_catalog::write_pi_models_json(&cfg, &agent_dir);
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[tauri::command]
+pub async fn list_model_catalog() -> Result<serde_json::Value, String> {
+    let path = crate::model_catalog::models_path();
+    let cfg = agnt_common::models::ModelsConfig::from_path(&path)?;
+    Ok(crate::model_catalog::build_catalog(&cfg))
+}
+
+#[tauri::command]
+pub async fn probe_provider_models(
+    endpoint: String,
+    api_key_env: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let api_key = api_key_env
+        .as_ref()
+        .and_then(|k| std::env::var(k).ok())
+        .unwrap_or_else(|| "not-needed".into());
+    let models = crate::model_catalog::fetch_openai_models(&endpoint, &api_key)?;
+    let list: Vec<_> = models
+        .into_iter()
+        .map(|(id, name)| serde_json::json!({ "id": id, "name": name }))
+        .collect();
+    Ok(serde_json::json!({ "models": list }))
+}
+
+#[tauri::command]
+pub async fn set_chat_model(provider: String, model_id: String) -> Result<(), String> {
+    let path = crate::model_catalog::models_path();
+    let mut cfg = agnt_common::models::ModelsConfig::from_path(&path)?;
+    if provider == "default" {
+        cfg.default.model = model_id.clone();
+    } else if let Some(p) = cfg.profiles.get_mut(&provider) {
+        p.model = model_id.clone();
+    } else {
+        return Err(format!("Unknown provider '{}'", provider));
+    }
+    let toml = cfg.to_toml_string()?;
+    std::fs::write(&path, toml).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    let agent_dir = pi_agent_dir();
+    let _ = crate::model_catalog::write_pi_models_json(&cfg, &agent_dir);
+    Ok(())
+}
+
+fn pi_agent_dir() -> std::path::PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        std::path::PathBuf::from(home).join(".pi/agent")
+    } else {
+        std::path::PathBuf::from("/root/.pi/agent")
+    }
+}
+
+#[tauri::command]
+pub async fn remove_model_profile(name: String) -> Result<String, String> {
+    let agntctl = resolve_agntctl();
+    let mut args = vec!["model".into(), "remove".into(), name];
+    args.extend(config_dir_flag());
+    let output = std::process::Command::new(&agntctl)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute agntctl: {}", e))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
         Err(String::from_utf8_lossy(&output.stderr).to_string())
     }

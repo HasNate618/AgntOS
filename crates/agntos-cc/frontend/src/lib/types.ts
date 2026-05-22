@@ -31,7 +31,7 @@ export interface AuditEntry {
   generation?: number;
 }
 
-export type Page = "chat" | "status" | "proposals" | "activity";
+export type Page = "chat" | "status" | "proposals" | "activity" | "models";
 
 export const TOOLS: Record<string, { color: string }> = {
   propose: { color: "#F57C48" },
