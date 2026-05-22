@@ -119,7 +119,7 @@ export default function ModelsPage() {
       <div className="flex-1 overflow-y-auto p-5 max-w-2xl mx-auto w-full space-y-6">
         <p className="text-sm text-muted-foreground">
           Add OpenAI-compatible API endpoints (e.g.{" "}
-          <code className="text-xs">http://homelab/bifrost/v1</code>). API keys are read from
+          <code className="text-xs">http://10.0.0.45/bifrost/v1</code>). API keys are read from
           the named environment variable on this machine — never stored in the UI. Choose
           models in the chat composer.
         </p>
@@ -139,7 +139,7 @@ export default function ModelsPage() {
           <h2 className="text-sm font-semibold">Add provider</h2>
           <div className="grid gap-2">
             <Input
-              placeholder="Provider id (e.g. bifrost, homelab)"
+              placeholder="Provider id (e.g. gateway, local)"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />

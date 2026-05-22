@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useAgentStore } from "@/hooks/TauriProvider";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface ModelOption {
   value: string;
@@ -12,7 +22,13 @@ export interface ModelOption {
 
 interface CatalogResponse {
   options?: ModelOption[];
-  providers?: { id: string; endpoint: string; error?: string; models: { id: string; name: string }[] }[];
+  providers?: {
+    id: string;
+    endpoint: string;
+    error?: string;
+    models: { id: string; name: string }[];
+  }[];
+  selected?: { provider: string; modelId: string; value: string } | null;
 }
 
 function optionsFromCatalog(data: CatalogResponse): ModelOption[] {
@@ -43,19 +59,58 @@ export default function ModelSelector({ className }: { className?: string }) {
   const [options, setOptions] = useState<ModelOption[]>([]);
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const applyModel = useCallback(
+    async (opt: ModelOption) => {
+      if (!window.__TAURI__) return;
+      setError(null);
+      try {
+        await window.__TAURI__.core.invoke("set_chat_model", {
+          provider: opt.provider,
+          model_id: opt.modelId,
+        });
+        await window.__TAURI__.core.invoke("set_model", {
+          provider: opt.provider,
+          model_id: opt.modelId,
+        });
+        dispatch({
+          type: "SET_CONNECTION",
+          payload: { model: opt.label },
+        });
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [dispatch],
+  );
 
   const refresh = useCallback(async () => {
     if (!window.__TAURI__) return;
     setLoading(true);
+    setError(null);
     try {
-      const data = (await window.__TAURI__.core.invoke("list_model_catalog")) as CatalogResponse;
+      const data = (await window.__TAURI__.core.invoke(
+        "list_model_catalog",
+      )) as CatalogResponse;
       const parsed = optionsFromCatalog(data);
       setOptions(parsed);
-      if (parsed.length > 0 && !selected) {
+      const sel = data.selected;
+      if (sel?.value && parsed.some((o) => o.value === sel.value)) {
+        setSelected(sel.value);
+      } else if (sel?.provider && sel.modelId) {
+        const value = `${sel.provider}/${sel.modelId}`;
+        if (parsed.some((o) => o.value === value)) {
+          setSelected(value);
+        } else if (parsed.length > 0) {
+          setSelected(parsed[0].value);
+        }
+      } else if (parsed.length > 0 && !selected) {
         setSelected(parsed[0].value);
       }
-    } catch {
+    } catch (e) {
       setOptions([]);
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -65,60 +120,75 @@ export default function ModelSelector({ className }: { className?: string }) {
     refresh();
   }, [refresh]);
 
-  const handleChange = async (value: string) => {
+  const handlePick = async (value: string) => {
     setSelected(value);
     const opt = options.find((o) => o.value === value);
-    if (!opt || !window.__TAURI__) return;
-    try {
-      await window.__TAURI__.core.invoke("set_chat_model", {
-        provider: opt.provider,
-        model_id: opt.modelId,
-      });
-      await window.__TAURI__.core.invoke("set_model", {
-        provider: opt.provider,
-        model_id: opt.modelId,
-      });
-      dispatch({
-        type: "SET_CONNECTION",
-        payload: { model: opt.label },
-      });
-    } catch {
-      // ignore
-    }
+    if (opt) await applyModel(opt);
   };
 
-  if (loading && options.length === 0) {
-    return (
-      <span className={cn("text-xs text-muted-foreground px-2", className)}>Models…</span>
-    );
-  }
-
-  if (options.length === 0) return null;
-
+  const current = options.find((o) => o.value === selected);
   const grouped = options.reduce<Record<string, ModelOption[]>>((acc, o) => {
     (acc[o.provider] ??= []).push(o);
     return acc;
   }, {});
 
-  return (
-    <div className={cn("relative flex items-center", className)}>
-      <select
-        value={selected}
-        onChange={(e) => handleChange(e.target.value)}
-        className="h-8 max-w-[220px] appearance-none truncate rounded-full border border-input bg-muted/50 pl-3 pr-8 text-xs font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-        aria-label="Model"
+  if (loading && options.length === 0) {
+    return (
+      <span className={cn("text-xs text-muted-foreground px-2", className)}>
+        Models…
+      </span>
+    );
+  }
+
+  if (options.length === 0) {
+    return error ? (
+      <span
+        className={cn("text-xs text-destructive truncate max-w-[200px]", className)}
+        title={error}
       >
-        {Object.entries(grouped).map(([provider, items]) => (
-          <optgroup key={provider} label={provider}>
+        No models
+      </span>
+    ) : null;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-8 max-w-[240px] gap-1 rounded-full border-input bg-muted/50 font-medium",
+            className,
+          )}
+          aria-label="Select model"
+        >
+          <span className="truncate text-xs">
+            {current?.label.replace(/^[^·]+ · /, "") ?? "Model"}
+          </span>
+          <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-80 w-72 overflow-y-auto">
+        {Object.entries(grouped).map(([provider, items], i) => (
+          <DropdownMenuGroup key={provider}>
+            {i > 0 && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              {provider}
+            </DropdownMenuLabel>
             {items.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label.replace(`${provider} · `, "")}
-              </option>
+              <DropdownMenuItem
+                key={o.value}
+                onClick={() => handlePick(o.value)}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{o.label.replace(`${provider} · `, "")}</span>
+                {selected === o.value && <Check className="size-3.5 shrink-0" />}
+              </DropdownMenuItem>
             ))}
-          </optgroup>
+          </DropdownMenuGroup>
         ))}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground" />
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
