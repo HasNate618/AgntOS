@@ -48,14 +48,48 @@ impl Default for AppConfig {
     }
 }
 
+fn resolve_pi_binary() -> String {
+    if let Ok(path) = std::env::var("AGNTOS_PI_BINARY") {
+        if !path.is_empty() {
+            return path;
+        }
+    }
+    if let Ok(paths) = std::env::var("PATH") {
+        for dir in paths.split(':') {
+            let candidate = std::path::Path::new(dir).join("pi");
+            if candidate.exists() {
+                return candidate.to_string_lossy().into_owned();
+            }
+        }
+    }
+    for candidate in &[
+        "/run/current-system/sw/bin/pi",
+        "/usr/local/bin/pi",
+        "/home/developer/.local/bin/pi",
+    ] {
+        if std::path::Path::new(candidate).exists() {
+            return (*candidate).into();
+        }
+    }
+    "pi".into()
+}
+
 impl AppConfig {
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = PathBuf::from("/etc/agntos/models.toml");
+        let base = config_dir();
+        let config_path = base.join("models.toml");
         let mut config = Self::default();
+        config.pi_binary = resolve_pi_binary();
 
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
             let parsed: toml::Value = content.parse::<toml::Value>()?;
+
+            if let Ok(cfg) = agnt_common::models::ModelsConfig::from_toml_str(&content) {
+                if !cfg.default.model.is_empty() {
+                    config.default_model = Some(format!("default/{}", cfg.default.model));
+                }
+            }
 
             if let Some(pi) = parsed.get("pi") {
                 if let Some(binary) = pi.get("binary").and_then(|v| v.as_str()) {

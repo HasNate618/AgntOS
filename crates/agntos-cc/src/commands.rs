@@ -140,6 +140,7 @@ pub async fn get_connection_status(
             connected: false,
             model: None,
             state: "disconnected".into(),
+            error: Some("Agent backend not initialized".into()),
         })
     }
 }

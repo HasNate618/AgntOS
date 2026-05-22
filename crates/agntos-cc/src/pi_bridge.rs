@@ -167,6 +167,7 @@ pub struct ConnectionStatus {
     pub connected: bool,
     pub model: Option<String>,
     pub state: String,
+    pub error: Option<String>,
 }
 
 #[derive(Debug)]
@@ -194,6 +195,7 @@ impl PiBridge {
             connected: false,
             model: None,
             state: "idle".into(),
+            error: None,
         }));
         let process = Arc::new(Mutex::new(None));
         let status_clone = status.clone();
@@ -263,11 +265,16 @@ impl PiBridge {
         let stderr = child.stderr.take().expect("stderr not available");
 
         // Read stderr in a separate task to prevent pipe deadlock
+        let status_stderr = status.clone();
         tokio::spawn(async move {
             let reader = tokio::io::BufReader::new(stderr);
             let mut lines = reader.lines();
-            while let Ok(Some(_)) = lines.next_line().await {
-                // discard
+            while let Ok(Some(line)) = lines.next_line().await {
+                if !line.trim().is_empty() {
+                    tracing::warn!("pi stderr: {}", line);
+                    let mut s = status_stderr.lock().await;
+                    s.error = Some(line);
+                }
             }
         });
 
@@ -276,6 +283,7 @@ impl PiBridge {
             connected: true,
             model: config.default_model.clone(),
             state: "idle".into(),
+            error: None,
         };
 
         app_handle.emit("agent:connected", ())?;
@@ -359,6 +367,9 @@ impl PiBridge {
         let mut s = status.lock().await;
         s.connected = false;
         s.state = "disconnected".into();
+        if s.error.is_none() {
+            s.error = Some("Pi agent process exited".into());
+        }
         drop(s);
         let _ = app_handle.emit("agent:disconnected", ());
     }

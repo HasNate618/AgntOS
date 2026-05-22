@@ -35,6 +35,11 @@ function ChatChrome() {
         />
         {connection.connected ? "Connected" : "Disconnected"}
       </Badge>
+      {!connection.connected && connection.error && (
+        <span className="text-xs text-destructive truncate max-w-[240px]" title={connection.error}>
+          {connection.error}
+        </span>
+      )}
       {connection.model && (
         <span className="ml-2 text-xs font-mono text-muted-foreground truncate max-w-[180px]">
           {connection.model}

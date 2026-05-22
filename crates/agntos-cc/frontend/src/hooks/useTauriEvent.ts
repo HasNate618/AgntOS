@@ -10,7 +10,7 @@ declare global {
         invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
       };
     };
-    __AGNTOS_BRIDGE_STATUS__?: { connected: boolean; state: string };
+    __AGNTOS_BRIDGE_STATUS__?: { connected: boolean; state: string; error?: string };
   }
 }
 

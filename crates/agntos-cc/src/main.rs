@@ -39,19 +39,27 @@ pub fn run() {
                 tracing::info!("Starting Pi bridge...");
                 let bridge_result = PiBridge::start(cfg, handle.clone()).await;
                 let connected = bridge_result.is_ok();
-                if let Ok(bridge) = bridge_result {
-                    *bridge_state.lock().await = Some(bridge);
-                    tracing::info!("Pi bridge started successfully");
-                } else if let Err(e) = &bridge_result {
-                    tracing::error!("Failed to start Pi bridge: {e}");
+                let err = match &bridge_result {
+                    Err(e) => e
+                        .to_string()
+                        .replace('\\', "\\\\")
+                        .replace('\'', "\\'"),
+                    Ok(_) => String::new(),
+                };
+                match bridge_result {
+                    Ok(bridge) => {
+                        *bridge_state.lock().await = Some(bridge);
+                        tracing::info!("Pi bridge started successfully");
+                    }
+                    Err(_) => tracing::error!("Failed to start Pi bridge: {}", err),
                 }
 
-                // Set connection status on window so frontend can read it without IPC
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 let js = format!(
-                    "window.__AGNTOS_BRIDGE_STATUS__ = {{ connected: {}, state: '{}' }}",
+                    "window.__AGNTOS_BRIDGE_STATUS__ = {{ connected: {}, state: '{}', error: '{}' }}",
                     if connected { "true" } else { "false" },
-                    if connected { "idle" } else { "disconnected" }
+                    if connected { "idle" } else { "disconnected" },
+                    err
                 );
                 for w in handle.webview_windows().values() {
                     let _ = w.eval(&js);

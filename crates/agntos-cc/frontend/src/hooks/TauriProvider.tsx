@@ -76,12 +76,16 @@ const AgentContext = createContext<{
 async function pollBridgeStatus(dispatch: React.Dispatch<Action>) {
   for (let i = 0; i < 30; i++) {
     const s = window.__AGNTOS_BRIDGE_STATUS__;
-    if (s && s.connected) {
+    if (s) {
       dispatch({
         type: "SET_CONNECTION",
-        payload: { connected: true, state: (s.state as ConnectionStatus["state"]) || "idle" },
+        payload: {
+          connected: s.connected,
+          state: (s.state as ConnectionStatus["state"]) || (s.connected ? "idle" : "disconnected"),
+          error: s.error ?? null,
+        },
       });
-      return;
+      if (s.connected) return;
     }
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -89,7 +93,7 @@ async function pollBridgeStatus(dispatch: React.Dispatch<Action>) {
 
 export function TauriProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(agentReducer, {
-    connection: { connected: false, model: null, state: "disconnected" },
+    connection: { connected: false, model: null, state: "disconnected", error: null },
     messages: [],
   });
 

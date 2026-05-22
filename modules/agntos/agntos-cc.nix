@@ -18,7 +18,13 @@ in {
       cfg.package
       agntctl
       nodejs
+      pi-coding-agent
+      curl
     ];
+
+    environment.variables = {
+      AGNTOS_PI_BINARY = "${pkgs.pi-coding-agent}/bin/pi";
+    };
 
     environment.etc."agntos/AGENTS.md".source = "${cfg.package}/share/agntos/AGENTS.md";
     environment.etc."agntos/extensions/agntos-tools".source = "${cfg.package}/share/agntos/extensions/agntos-tools";

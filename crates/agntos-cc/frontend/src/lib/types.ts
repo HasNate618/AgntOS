@@ -17,6 +17,7 @@ export interface ConnectionStatus {
   connected: boolean;
   model: string | null;
   state: "disconnected" | "connecting" | "connected" | "idle" | "thinking" | "error";
+  error?: string | null;
 }
 
 export interface AuditEntry {
