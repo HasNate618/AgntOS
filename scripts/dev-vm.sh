@@ -13,7 +13,7 @@ LOG_DIR="$ROOT/.cache"
 LOG_FILE="$LOG_DIR/agntos-vm.log"
 TMUX_SESSION="${AGNTOS_TMUX_SESSION:-agntos-dev}"
 TMUX_CONF="/etc/agntos/dev.tmux.conf"
-EVAL="$ROOT/.specs/features/agntos-foundation/eval-runbook.sh"
+EVAL_GUEST="/mnt/agntos-src/.specs/features/agntos-foundation/eval-runbook.sh"
 
 SSH_OPTS=(
   -o StrictHostKeyChecking=no
@@ -198,7 +198,7 @@ cmd_eval() {
     exit 1
   fi
   ssh "${SSH_OPTS[@]}" "$SSH_USER@localhost" \
-    "sudo AGNTOS_CONFIG_DIR=/etc/agntos bash $EVAL"
+    "sudo AGNTOS_CONFIG_DIR=/etc/agntos bash $EVAL_GUEST"
 }
 
 cmd_logs() {
