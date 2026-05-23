@@ -19,7 +19,7 @@ rustPlatform.buildRustPackage {
 
   postPatch = ''
     substituteInPlace Cargo.toml \
-      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n  "crates/agntos-cc",\n]' \
+      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n]' \
       $'members = ["crates/agnt-common", "crates/agntd"]\ndefault-members = ["crates/agntd"]'
   '';
 
@@ -32,7 +32,7 @@ rustPlatform.buildRustPackage {
 
   meta = {
     description = "AgntOS agent daemon";
-    license = lib.licenses.mit;
+    license = lib.licenses.gpl3Plus;
     mainProgram = "agntd";
   };
 }

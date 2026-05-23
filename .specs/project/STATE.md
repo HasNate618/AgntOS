@@ -1,19 +1,29 @@
 # AgntOS State
 
+**Product direction:** See [VISION.md](./VISION.md) — canonical as of 2026-05. Supersedes GUI-first / Pi-Tauri tracks unless explicitly reopened here.
+
 ## Current Phase
 
-**Settings Stabilization (SS track)** — Aligning the agntos-settings GUI with its own Phase 3 spec. Phase 3 v1 is code-complete but the runtime path drifted from the spec: ad hoc `serde_json::Value` state, missing turn lifecycle, broken proposal rendering, refresh crashes. The stabilization track replaces the dual model/bridge split with a single AppSession source of truth, explicit turn state, and proper event routing.
+**TLC: `baseline-clean` (complete) → `wedge-a` (next)**
 
-Phase 3.2 (model routing page, memory viewer, cxx-qt bridge) is deferred until stabilization is complete.
+1. **Now:** [baseline-clean](../features/baseline-clean/spec.md) — slim repo to core Rust + Nix + honest docs; legacy under `legacy/`; GPL; frozen specs.
+2. **Next:** Wedge A — `agnt` TUI, Cage + Foot + tmux dev VM, policy (`propose` only for LLM), XDG memory path.
 
-### Stabilization Track Status
+Focus after baseline: ship one end-to-end path (`agnt` TUI → `agntd` → `agntctl` → Nix) on a **Cage + Foot + tmux** dev VM.
 
-- SST-01 through SST-04 (foundation): Not started
-- SST-05 through SST-08 (QML migration): Not started
-- SST-09 through SST-10 (event routing, reconnect): Not started
-- SST-11 through SST-12 (testing, validation): Not started
+### Wedge A checklist (not started unless noted)
 
-See `.specs/features/settings-stabilization/` for spec, design, and tasks.
+- [ ] `agnt` TUI (streaming, tool cards, apply/rollback approval)
+- [ ] Dev profile: Cage + Foot + tmux autologin; remove CC + Plasma from `dev-vm.nix`
+- [ ] Single agent in VM (`agntd` only)
+- [ ] README / docs aligned with VISION
+- [ ] v1.1: read-only `SKILL.md` + slash commands (see VISION)
+
+### Parked (do not extend without STATE update)
+
+- Settings Stabilization (`agntos-settings` / Kirigami) — frozen
+- `agntos-cc` / `pi-tauri-migration` / `cc-gui-v2` — frozen
+- MCP integration — roadmap only (VISION D-06)
 
 ## Completed (Phase 0)
 

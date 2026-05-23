@@ -19,6 +19,9 @@
 
 # Node.js
 node_modules/
+legacy/**/node_modules/
+legacy/**/frontend/dist/
+legacy/**/target/
 
 # Editor and OS noise
 .DS_Store

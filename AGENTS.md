@@ -2,6 +2,8 @@
 
 ## Project
 
+**Read `.specs/project/VISION.md` first** for product direction, wedge scope, and what is parked (GUI/Pi/CC).
+
 AI-native NixOS distro. The LLM is the nervous system, not a sidecar. 3 mutation layers:
 - System: propose -> apply -> nixos-rebuild
 - Memory: agent learns -> stores -> next session knows more
@@ -86,16 +88,15 @@ crates/
   agnt-common/     Shared types (audit, config, memory, models, wire)
   agntctl/         OS control CLI (10 tools)
   agntd/           LLM agent daemon (prompt, tools, session store)
-  agntos-settings/ Kirigami GUI (QML, socket backend, data models)
-modules/agntos/    NixOS modules (base, desktop-plasma, agent, vm, agntos-settings)
+legacy/            Frozen GUI stacks (agntos-cc, agntos-settings) — not in workspace
+modules/agntos/    NixOS modules (base, desktop-plasma, agent, vm)
 profiles/          dev-vm, plasma
-.specs/            Project memory (vision, roadmap, state, feature specs)
+.specs/            VISION.md, features, eval-runbook
 ```
 
 ## State
 
-- Phase 1 complete (foundation + expansions A-F)
-- Phase 2 complete (model management CLI)
-- Phase 3 v1 complete (Kirigami GUI: Chat, Status, Proposals, Activity)
-- Phase 3.2 planned (model routing page, memory viewer, cxx-qt bridge)
-- 120 tests (51 agntctl + 27 agntd + 12 agnt-common + 30 agntos-settings), 14/14 eval
+- **Current:** `baseline-clean` done → next `wedge-a` (`agnt` TUI, terminal dev edition)
+- **Parked:** `legacy/agntos-cc`, `legacy/agntos-settings` — do not extend without VISION update
+- **Core tests:** `cargo test` on workspace (agnt-common + agntctl + agntd)
+- **VM eval:** `bash .specs/features/agntos-foundation/eval-runbook.sh` (14 checks)

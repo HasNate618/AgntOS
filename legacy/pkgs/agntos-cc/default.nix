@@ -21,13 +21,7 @@ rustPlatform.buildRustPackage {
     src = ../..;
   };
 
-  cargoBuildFlags = [ "-p" "agntos-cc" ];
-
-  postPatch = ''
-    substituteInPlace Cargo.toml \
-      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n  "crates/agntos-cc",\n]' \
-      $'members = ["crates/agntos-cc"]\ndefault-members = ["crates/agntos-cc"]'
-  '';
+  cargoBuildFlags = [ "--manifest-path" "legacy/agntos-cc/Cargo.toml" ];
 
   nativeBuildInputs = [ pkg-config makeWrapper ];
   buildInputs = [
@@ -42,16 +36,16 @@ rustPlatform.buildRustPackage {
 
   preBuild = ''
     echo ">>> [agntos-cc] copying pre-built frontend from ${agntos-cc-frontend}"
-    rm -rf crates/agntos-cc/frontend/dist
-    cp -r ${agntos-cc-frontend}/dist crates/agntos-cc/frontend/dist
-    test -f crates/agntos-cc/frontend/dist/index.html
+    rm -rf legacy/agntos-cc/frontend/dist
+    cp -r ${agntos-cc-frontend}/dist legacy/agntos-cc/frontend/dist
+    test -f legacy/agntos-cc/frontend/dist/index.html
     echo ">>> [agntos-cc] frontend ready"
   '';
 
   postInstall = ''
     mkdir -p $out/share/agntos
-    cp -r crates/agntos-cc/etc/agntos/AGENTS.md $out/share/agntos/
-    cp -r crates/agntos-cc/etc/agntos/extensions $out/share/agntos/
+    cp -r legacy/agntos-cc/etc/agntos/AGENTS.md $out/share/agntos/
+    cp -r legacy/agntos-cc/etc/agntos/extensions $out/share/agntos/
 
     mkdir -p $out/share/applications
     cat > $out/share/applications/agntos-cc.desktop << 'DESKTOP'

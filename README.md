@@ -6,7 +6,11 @@
 </p>
 
 <p align="center">
-  <strong>AgntOS is a NixOS distribution built for AI-driven system management. An LLM agent proposes configuration changes, you approve them, and NixOS applies them declaratively with a full audit trail and instant rollback.</strong>
+  <strong>AgntOS is an AI-native NixOS platform: a general-purpose local agent with OS-aware tools, declarative system changes via Nix, and a full audit trail. Ship as a flake module first; terminal-first dev edition is the current wedge.</strong>
+</p>
+
+<p align="center">
+  <em>Product direction: <a href=".specs/project/VISION.md">.specs/project/VISION.md</a>. GUI stacks (Control Centre, Kirigami) are parked under <code>legacy/</code>.</em>
 </p>
 
 - [The Problem](#the-problem)

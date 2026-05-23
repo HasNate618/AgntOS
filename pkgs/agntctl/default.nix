@@ -19,7 +19,7 @@ rustPlatform.buildRustPackage {
 
   postPatch = ''
     substituteInPlace Cargo.toml \
-      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n  "crates/agntos-cc",\n]' \
+      --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agntctl",\n  "crates/agntd",\n]' \
       $'members = ["crates/agnt-common", "crates/agntctl"]\ndefault-members = ["crates/agntctl"]'
   '';
 
@@ -32,7 +32,7 @@ rustPlatform.buildRustPackage {
 
   meta = {
     description = "AgntOS control tool for Nix-backed system changes";
-    license = lib.licenses.mit;
+    license = lib.licenses.gpl3Plus;
     mainProgram = "agntctl";
   };
 }
