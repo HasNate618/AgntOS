@@ -28,6 +28,12 @@ pub struct ModelProfile {
     pub max_tokens: u32,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+    #[serde(default = "default_supports_tools")]
+    pub supports_tools: bool,
+}
+
+fn default_supports_tools() -> bool {
+    true
 }
 
 fn default_max_tokens() -> u32 {
@@ -64,12 +70,17 @@ impl ModelProfile {
             .and_then(|v| v.as_float())
             .map(|v| v as f32)
             .unwrap_or_else(default_temperature);
+        let supports_tools = table
+            .get("supports_tools")
+            .and_then(|v| v.as_bool())
+            .unwrap_or_else(default_supports_tools);
         Ok(Self {
             endpoint,
             model,
             api_key_env,
             max_tokens,
             temperature,
+            supports_tools,
         })
     }
 }

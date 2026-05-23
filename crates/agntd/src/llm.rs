@@ -59,6 +59,8 @@ struct AssistantMessage {
     #[serde(default)]
     content: Option<String>,
     #[serde(default)]
+    reasoning: Option<String>,
+    #[serde(default)]
     tool_calls: Option<Vec<RawToolCall>>,
 }
 
@@ -174,7 +176,7 @@ impl LlmClient {
                     Err(_) => continue,
                 };
                 if let Some(choice) = parsed.choices.into_iter().next() {
-                    if let Some(c) = choice.delta.content {
+                    if let Some(c) = stream_delta_text(&choice.delta) {
                         print!("{}", c);
                         use std::io::Write;
                         let _ = std::io::stdout().flush();
@@ -275,9 +277,9 @@ impl LlmClient {
                     Err(_) => continue,
                 };
                 if let Some(choice) = parsed.choices.into_iter().next() {
-                    if let Some(c) = choice.delta.content {
+                    if let Some(c) = stream_delta_text(&choice.delta) {
                         content.push_str(&c);
-                        let token_msg = ServerMessage::Token { content: c };
+                        let token_msg = ServerMessage::Token { content: c.clone() };
                         if let Ok(json) = serde_json::to_string(&token_msg) {
                             let _ = writeln!(writer, "{}", json);
                         }
@@ -570,16 +572,33 @@ fn completion_payload(
     tools: &[Value],
     stream: bool,
 ) -> Value {
-    json!({
-        "model": profile.model,
-        "messages": messages,
-        "tools": tools,
-        "tool_choice": "auto",
-        "stream": stream,
-        "max_tokens": profile.max_tokens,
-        "temperature": profile.temperature,
-        "thinking": true,
-    })
+    let mut payload = serde_json::Map::new();
+    payload.insert("model".into(), json!(profile.model));
+    payload.insert("messages".into(), json!(messages));
+    payload.insert("stream".into(), json!(stream));
+    payload.insert("max_tokens".into(), json!(profile.max_tokens));
+    payload.insert("temperature".into(), json!(profile.temperature));
+    if profile.supports_tools && !tools.is_empty() {
+        payload.insert("tools".into(), json!(tools));
+        payload.insert("tool_choice".into(), json!("auto"));
+    }
+    Value::Object(payload)
+}
+
+fn message_text(content: Option<String>, reasoning: Option<String>) -> String {
+    content
+        .filter(|s| !s.is_empty())
+        .or(reasoning)
+        .unwrap_or_default()
+}
+
+fn stream_delta_text(delta: &StreamDelta) -> Option<String> {
+    if let Some(c) = &delta.content {
+        if !c.is_empty() {
+            return Some(c.clone());
+        }
+    }
+    delta.reasoning.clone().filter(|s| !s.is_empty())
 }
 
 #[allow(dead_code)]
@@ -600,7 +619,7 @@ fn parse_completion_response(body: &str) -> Result<AssistantResponse, String> {
         ));
     }
 
-    let content = choice.message.content.unwrap_or_default();
+    let content = message_text(choice.message.content, choice.message.reasoning);
     let mut tool_calls = Vec::new();
     let mut raw_tool_calls = Vec::new();
 
@@ -657,6 +676,8 @@ struct StreamChoice {
 struct StreamDelta {
     #[serde(default)]
     content: Option<String>,
+    #[serde(default)]
+    reasoning: Option<String>,
     #[serde(default)]
     tool_calls: Option<Vec<StreamToolCall>>,
 }

@@ -3,7 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export PRJ_ROOT="$(pwd)"
+export NIX_CFLAGS_COMPILE="${NIX_CFLAGS_COMPILE:-}"
 
+echo "==> PRJ_ROOT=$PRJ_ROOT (required for /mnt/agntos-src mount in VM)"
 echo "==> Building NixOS dev VM (this may take a while on first run)..."
 nix build --impure .#nixosConfigurations.agntos-dev-vm.config.system.build.vm --print-build-logs
 

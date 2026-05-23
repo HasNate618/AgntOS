@@ -127,6 +127,7 @@ pub fn execute_add(
         api_key_env: api_key_env.map(|s| s.to_string()),
         max_tokens: max_tokens.unwrap_or(4096),
         temperature: temperature.unwrap_or(0.7),
+        supports_tools: true,
     };
 
     cfg.profiles.insert(name.to_string(), profile);

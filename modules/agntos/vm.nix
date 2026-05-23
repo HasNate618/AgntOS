@@ -35,7 +35,11 @@ in {
     serviceConfig.Type = "oneshot";
     script = ''
       mkdir -p /mnt/agntos-src
-      mount -t 9p -o trans=virtio,version=9p2000.L agntos-source /mnt/agntos-src || true
+      if mount -t 9p -o trans=virtio,version=9p2000.L agntos-source /mnt/agntos-src; then
+        echo "agntos: mounted source at /mnt/agntos-src"
+      else
+        echo "agntos: source mount failed (rebuild/run VM with PRJ_ROOT set to repo root)" >&2
+      fi
     '';
     serviceConfig.RemainAfterExit = true;
   };

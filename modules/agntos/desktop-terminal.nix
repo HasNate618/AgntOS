@@ -1,6 +1,6 @@
 { config, pkgs, lib, ... }:
 
-in {
+{
   config = lib.mkIf config.agntos.enable {
     services.getty.autologinUser = lib.mkDefault "developer";
 

@@ -10,6 +10,19 @@
     auto_apply = "auto";
   };
 
+  environment.etc."agntos/models.toml".text = ''
+    [default]
+    endpoint = "http://10.0.0.45/bifrost/v1"
+    model = "cohere/command-a-plus-05-2026"
+    supports_tools = false
+
+    [routing]
+    chat = "default"
+    inspect = "default"
+    propose = "default"
+    memory = "default"
+  '';
+
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
@@ -49,19 +62,18 @@
   ];
 
   programs.bash.interactiveShellInit = ''
-    if [ -d /mnt/agntos-src ]; then
-      alias agntos="cd /mnt/agntos-src"
-      alias agnt-build="cd /mnt/agntos-src && cargo build --release"
-      alias agnt-check="cd /mnt/agntos-src && cargo check"
-      alias agnt-inspect="agnt system inspect"
-      alias agnt-agent="agnt"
+    alias agntos='cd /mnt/agntos-src 2>/dev/null || cd ~'
+    alias agnt-inspect='agnt system inspect'
+    alias agnt-agent='agnt'
+    if [ -x /mnt/agntos-src/target/release/agntctl ]; then
+      alias agnt-build='cd /mnt/agntos-src && cargo build --release'
+      alias agnt-check='cd /mnt/agntos-src && cargo check'
       export PATH="/mnt/agntos-src/target/release:$PATH"
-      echo "AgntOS dev: agnt | agnt system … | agnt-build"
+      echo "AgntOS dev: mounted source at /mnt/agntos-src"
+    else
+      echo "AgntOS dev: use Nix packages (rebuild VM with PRJ_ROOT set to mount source)"
     fi
   '';
-
-  systemd.user.services.agntd.serviceConfig.ExecStart = lib.mkForce
-    "/mnt/agntos-src/target/release/agntd --socket /run/agntd/agent.sock";
 
   system.stateVersion = "24.11";
 }
