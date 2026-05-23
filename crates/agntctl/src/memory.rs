@@ -4,8 +4,6 @@
 use agnt_common::memory::{CoreMemory, MemoryFile};
 use std::path::PathBuf;
 
-const DEFAULT_CONFIG_DIR: &str = "/etc/agntos";
-
 fn usage_note(usage: u8) -> &'static str {
     if usage >= 100 {
         " Memory is full; remove or replace entries."
@@ -16,11 +14,12 @@ fn usage_note(usage: u8) -> &'static str {
     }
 }
 
-fn load_memory(config_dir: Option<&PathBuf>) -> Result<CoreMemory, String> {
-    let dir = config_dir
-        .cloned()
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_DIR));
-    CoreMemory::load(dir)
+fn load_memory(state_dir: Option<&PathBuf>) -> Result<CoreMemory, String> {
+    if let Some(dir) = state_dir {
+        CoreMemory::load_at(dir.join("memory"))
+    } else {
+        CoreMemory::load()
+    }
 }
 
 pub fn execute_show(

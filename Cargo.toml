@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/agnt-common",
+  "crates/agnt",
   "crates/agntctl",
   "crates/agntd",
 ]

@@ -209,6 +209,26 @@ pub fn propose_change(verb: &str, target: &str) -> String {
     }
 }
 
+pub fn maybe_auto_apply_after_propose(config_dir: &str, propose_output: &str) -> Result<(), String> {
+    use agnt_common::settings::{AgntosSettings, ApplyPolicy};
+    if AgntosSettings::load_from_config_dir(config_dir).auto_apply != ApplyPolicy::Auto {
+        return Ok(());
+    }
+    let id = extract_proposal_id(propose_output)
+        .ok_or_else(|| "auto_apply: could not parse proposal id from propose output".to_string())?;
+    match run_agntctl(&["apply", "--config-dir", config_dir, &id]) {
+        Ok((stdout, stderr, success)) => {
+            if success {
+                eprintln!("  [auto_apply] applied proposal {}", id);
+            } else {
+                eprintln!("  [auto_apply] failed: {}{}", stderr, stdout);
+            }
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Shortcut for applying a proposal by ID via `agntctl`.
 pub fn apply_proposal(id: &str) {
     let cfg = config_dir_str();

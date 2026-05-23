@@ -225,43 +225,9 @@ fn execute_tool_call(tc: &ToolCall, user_prompt: Option<&str>) -> Result<String,
                 cmd.push("--rationale");
                 cmd.push(rationale);
             }
-            command_result(util::run_agntctl(&cmd))
-        }
-        "apply" => {
-            let proposal_id = args
-                .get("proposal_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "Missing required argument: proposal_id".to_string())?;
-
-            if !util::confirm(&format!("  LLM requests apply {}. Proceed?", proposal_id)) {
-                // Return a message that the LLM can act on: does NOT retry.
-                return Ok(format!(
-                    "APPLY_CANCELLED: confirmation declined. Proposal {} was NOT applied. \
-Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed.",
-                    proposal_id, proposal_id
-                ));
-            }
-
-            let no_rebuild = args
-                .get("no_rebuild")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if no_rebuild {
-                command_result(util::run_agntctl(&[
-                    "apply",
-                    "--no-rebuild",
-                    "--config-dir",
-                    &cfg,
-                    proposal_id,
-                ]))
-            } else {
-                command_result(util::run_agntctl(&[
-                    "apply",
-                    "--config-dir",
-                    &cfg,
-                    proposal_id,
-                ]))
-            }
+            let out = command_result(util::run_agntctl(&cmd))?;
+            util::maybe_auto_apply_after_propose(&cfg, &out)?;
+            Ok(out)
         }
         "audit" => {
             let action = args
@@ -331,15 +297,8 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                             "memory",
                             "show",
                             f,
-                            "--config-dir",
-                            &cfg,
                         ])),
-                        None => command_result(util::run_agntctl(&[
-                            "memory",
-                            "show",
-                            "--config-dir",
-                            &cfg,
-                        ])),
+                        None => command_result(util::run_agntctl(&["memory", "show"])),
                     }
                 }
                 "add" => {
@@ -363,8 +322,6 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                         section,
                         "--content",
                         content,
-                        "--config-dir",
-                        &cfg,
                     ]))
                 }
                 "replace" => {
@@ -388,8 +345,6 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                         target,
                         "--replacement",
                         replacement,
-                        "--config-dir",
-                        &cfg,
                     ]))
                 }
                 "remove" => {
@@ -407,8 +362,6 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                         file,
                         "--target",
                         target,
-                        "--config-dir",
-                        &cfg,
                     ]))
                 }
                 "consolidate" => {
@@ -416,38 +369,10 @@ Do NOT retry — tell the user to run 'agntctl apply {}' if they want to proceed
                         .get("file")
                         .and_then(|v| v.as_str())
                         .unwrap_or("memory");
-                    command_result(util::run_agntctl(&[
-                        "memory",
-                        "consolidate",
-                        file,
-                        "--config-dir",
-                        &cfg,
-                    ]))
+                    command_result(util::run_agntctl(&["memory", "consolidate", file]))
                 }
                 other => Err(format!("Unsupported memory action: {}", other)),
             }
-        }
-        "rollback" => {
-            if !util::confirm("  LLM requests system rollback. Proceed?") {
-                return Ok(
-                    "ROLLBACK_CANCELLED: confirmation declined. System was NOT rolled back. \
-Do NOT retry — tell the user to run 'agntctl rollback apply' if they want to proceed."
-                        .to_string(),
-                );
-            }
-            let audit_id = args.get("audit_id").and_then(|v| v.as_str());
-            let mut cmd = vec!["rollback", "--config-dir", &cfg];
-            match audit_id {
-                Some(id) if !id.is_empty() => {
-                    cmd.push("undo");
-                    cmd.push("--undo-id");
-                    cmd.push(id);
-                }
-                _ => {
-                    cmd.push("apply");
-                }
-            }
-            command_result(util::run_agntctl(&cmd))
         }
         "read_file" => {
             let path = args
@@ -514,120 +439,9 @@ Do NOT retry — tell the user to run 'agntctl rollback apply' if they want to p
 pub fn execute_tool_call_gui(
     tc: &ToolCall,
     user_prompt: Option<&str>,
-    approval_gate: SharedApprovalGate,
+    _approval_gate: SharedApprovalGate,
 ) -> Result<String, String> {
-    let cfg = util::config_dir_str();
-    let args = tc.arguments.as_object().cloned().unwrap_or_default();
-
-    match tc.name.as_str() {
-        "apply" => {
-            let proposal_id = args
-                .get("proposal_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "Missing required argument: proposal_id".to_string())?;
-
-            {
-                let mut gate = approval_gate.lock().unwrap();
-                *gate = Some(ApprovalGate {
-                    proposal_id: proposal_id.to_string(),
-                    tool_call_id: tc.id.clone(),
-                    summary: format!("Apply proposal {}", proposal_id),
-                    resolved: false,
-                    approved: false,
-                });
-            }
-
-            let start = std::time::Instant::now();
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                if start.elapsed().as_secs() > 300 {
-                    return Err("GUI approval timeout (5 min) — proposal not applied.".to_string());
-                }
-                let gate = approval_gate.lock().unwrap();
-                if let Some(ref g) = *gate {
-                    if g.resolved {
-                        if g.approved {
-                            break;
-                        } else {
-                            return Ok(format!(
-                                "APPLICATION_REJECTED: User declined proposal {}. Do NOT retry.",
-                                proposal_id
-                            ));
-                        }
-                    }
-                }
-            }
-
-            let no_rebuild = args
-                .get("no_rebuild")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if no_rebuild {
-                command_result(util::run_agntctl(&[
-                    "apply",
-                    "--no-rebuild",
-                    "--config-dir",
-                    &cfg,
-                    proposal_id,
-                ]))
-            } else {
-                command_result(util::run_agntctl(&[
-                    "apply",
-                    "--config-dir",
-                    &cfg,
-                    proposal_id,
-                ]))
-            }
-        }
-        "rollback" => {
-            {
-                let mut gate = approval_gate.lock().unwrap();
-                *gate = Some(ApprovalGate {
-                    proposal_id: String::new(),
-                    tool_call_id: tc.id.clone(),
-                    summary: "Roll back to previous NixOS generation".to_string(),
-                    resolved: false,
-                    approved: false,
-                });
-            }
-
-            let start = std::time::Instant::now();
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                if start.elapsed().as_secs() > 300 {
-                    return Err(
-                        "GUI approval timeout (5 min) — rollback not performed.".to_string()
-                    );
-                }
-                let gate = approval_gate.lock().unwrap();
-                if let Some(ref g) = *gate {
-                    if g.resolved {
-                        if g.approved {
-                            break;
-                        } else {
-                            return Ok("ROLLBACK_REJECTED: User declined rollback. Do NOT retry."
-                                .to_string());
-                        }
-                    }
-                }
-            }
-
-            let audit_id = args.get("audit_id").and_then(|v| v.as_str());
-            let mut cmd = vec!["rollback", "--config-dir", &cfg];
-            match audit_id {
-                Some(id) if !id.is_empty() => {
-                    cmd.push("undo");
-                    cmd.push("--undo-id");
-                    cmd.push(id);
-                }
-                _ => {
-                    cmd.push("apply");
-                }
-            }
-            command_result(util::run_agntctl(&cmd))
-        }
-        _other => execute_tool_call(tc, user_prompt),
-    }
+    execute_tool_call(tc, user_prompt)
 }
 
 /// Reads pending proposal IDs from the proposals directory for the session_ready message.
@@ -765,7 +579,6 @@ JSON:",
     };
 
     let mut extracted = 0;
-    let cfg = util::config_dir_str();
 
     if let Some(memory_items) = facts.get("memory").and_then(|a| a.as_array()) {
         for item in memory_items {
@@ -778,8 +591,6 @@ JSON:",
                     "Session",
                     "--content",
                     text,
-                    "--config-dir",
-                    &cfg,
                 ]);
                 extracted += 1;
             }
@@ -797,16 +608,14 @@ JSON:",
                     "Session",
                     "--content",
                     text,
-                    "--config-dir",
-                    &cfg,
                 ]);
                 extracted += 1;
             }
         }
     }
 
-    let _ = util::run_agntctl(&["memory", "consolidate", "memory", "--config-dir", &cfg]);
-    let _ = util::run_agntctl(&["memory", "consolidate", "user", "--config-dir", &cfg]);
+    let _ = util::run_agntctl(&["memory", "consolidate", "memory"]);
+    let _ = util::run_agntctl(&["memory", "consolidate", "user"]);
 
     if extracted > 0 {
         Ok(format!(
@@ -821,7 +630,8 @@ JSON:",
 /// Seeds `MEMORY.md` with a compact system snapshot on first run.
 /// Does nothing if memory already contains data.
 pub fn seed_memory_if_empty(config_dir: &str, inspect_summary: &str) -> Result<(), String> {
-    let mut mem = agnt_common::memory::CoreMemory::load(config_dir)?;
+    let _ = config_dir;
+    let mut mem = agnt_common::memory::CoreMemory::load()?;
     if !mem.memory.trim().is_empty() {
         return Ok(());
     }

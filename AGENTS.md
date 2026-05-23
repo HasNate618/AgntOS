@@ -15,8 +15,8 @@ AI-native NixOS distro. The LLM is the nervous system, not a sidecar. 3 mutation
 |---|---|---|
 | `inspect` | No | CPU, memory, GPU, disk, network |
 | `propose` | No | Stage a Nix config change |
-| `apply` | **Yes** | Apply proposal, write files, rebuild |
-| `rollback` | **Yes** | Generation rollback or surgical undo |
+| `apply` | **Yes** (human/TUI only) | Apply proposal — not an LLM tool |
+| `rollback` | **Yes** (human/TUI only) | Generation rollback or surgical undo |
 | `audit` | No | Search action history by prompt/path/package |
 | `memory` | No | Curate MEMORY.md and USER.md |
 | `read_file` | No | Read a file |
@@ -32,7 +32,7 @@ Chain propose -> apply without pausing (confirmation is automatic). Use `run_bas
 - **Single memory system.** Curate MEMORY.md and USER.md yourself via the `memory` tool. No background extraction. Store preferences and intent, not inspectable facts (CPU, RAM, packages — those are re-derivable).
 - **Provenance.** Every `apply` records your prompt. When asked "why was X done?", use `audit(search: "X")` to retrieve it.
 - **No MCP.** The agent extends itself via bash. `curl` for APIs, `jq`/`yq`/`python3` for parsing.
-- **Chain propose->apply** without asking permission. Only apply and rollback gate on confirmation.
+- **LLM proposes only.** User or `auto_apply` policy (see `/etc/agntos/settings.json`) applies. Dev VM defaults to `auto_apply = auto`.
 
 ## Spec-driven development
 
@@ -86,6 +86,7 @@ Eval: `bash .specs/features/agntos-foundation/eval-runbook.sh` (14 checks)
 ```
 crates/
   agnt-common/     Shared types (audit, config, memory, models, wire)
+  agnt/            Unified CLI (`agnt`, `agnt system …`)
   agntctl/         OS control CLI (10 tools)
   agntd/           LLM agent daemon (prompt, tools, session store)
 legacy/            Frozen GUI stacks (agntos-cc, agntos-settings) — not in workspace

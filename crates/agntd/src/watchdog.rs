@@ -249,9 +249,12 @@ Health check: {}\nOutput:\n{}\n\nLogs:\n{}",
     }
 }
 
-fn log(config_dir: &str, msg: &str) {
+fn log(_config_dir: &str, msg: &str) {
     eprintln!("{}", msg);
-    let log_path = format!("{}/memory/watchdog.log", config_dir);
+    let log_path = agnt_common::paths::agent_state_dir()
+        .join("watchdog.log")
+        .to_string_lossy()
+        .to_string();
     if let Ok(ts) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
         let line = format!("{} {}\n", ts.as_secs(), msg);
         let _ = std::fs::OpenOptions::new()

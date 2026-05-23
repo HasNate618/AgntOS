@@ -377,21 +377,6 @@ pub fn tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "function": {
-                "name": "apply",
-                "description": "Apply a proposal by ID. Requires user confirmation.",
-                "parameters": {
-                    "type": "object",
-                    "required": ["proposal_id"],
-                    "properties": {
-                        "proposal_id": { "type": "string" },
-                        "no_rebuild": { "type": "boolean" }
-                    }
-                }
-            }
-        }),
-        json!({
-            "type": "function",
-            "function": {
                 "name": "audit",
                 "description": "Read or search the audit log for past actions. Use 'search' with a query to find entries by package name, file path, summary, or the original user prompt that triggered the action. This is how you answer 'why was X installed?' questions.",
                 "parameters": {
@@ -420,19 +405,6 @@ pub fn tool_definitions() -> Vec<Value> {
                         "content": { "type": "string" },
                         "target": { "type": "string" },
                         "replacement": { "type": "string" }
-                    }
-                }
-            }
-        }),
-        json!({
-            "type": "function",
-            "function": {
-                "name": "rollback",
-                "description": "Undo a previous apply or roll back to the previous NixOS generation. If audit_id is given, surgically undoes that specific apply. Otherwise does a full generation rollback. Requires confirmation.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "audit_id": { "type": "string", "description": "Audit entry ID to surgically undo (from audit search)" }
                     }
                 }
             }
@@ -502,7 +474,7 @@ pub fn tool_definitions() -> Vec<Value> {
 pub fn build_system_prompt(config_dir: impl AsRef<Path>, inspect_summary: &str) -> String {
     let cds = config_dir.as_ref().to_string_lossy().to_string();
 
-    let memory = CoreMemory::load(&cds).unwrap_or_else(|_| CoreMemory {
+    let memory = CoreMemory::load().unwrap_or_else(|_| CoreMemory {
         memory: String::new(),
         user: String::new(),
         memory_path: "".into(),
@@ -514,10 +486,9 @@ pub fn build_system_prompt(config_dir: impl AsRef<Path>, inspect_summary: &str) 
 You inspect, configure, and debug the system through typed tools.\n\
 \n\
 Rules:\n\
-- For package/service changes, use propose FIRST, then apply. Do not\n\
-  investigate the config files manually — propose handles it.\n\
-- Do not ask permission to apply — confirmation fires automatically.\n\
-  Just chain propose→apply without pausing.\n\
+- For package/service changes, use propose only. You cannot apply or rollback;\n\
+  the user runs `agnt system apply <id>` or the TUI approves when ready.\n\
+- After propose, tell the user the proposal id and how to apply it.\n\
 - Prefer edit_file over run_bash for modifying files.\n\
 - Use run_bash for ls, grep, find, systemctl, journalctl, dmesg,\n\
   and any command without a dedicated tool.\n\
@@ -527,8 +498,7 @@ Rules:\n\
 - When asked why a change was made (e.g. \"why is X installed?\"),\n\
   use audit search to retrieve the recorded prompt. Every apply stores\n\
   the user\'s original request in the audit log.\n\
-- Review any pending proposals listed below. Offer to apply plausible ones,\n\
-  dismiss stale ones, or explain why they should not be applied.\n\
+- Review pending proposals below; suggest the user apply or dismiss them.\n\
 - Explain what you are doing and why. Be concise.\n\
 \n\
 System snapshot:\n{}\n\
@@ -538,7 +508,7 @@ MEMORY.md ({}% used):\n{}\n\
 \n\
 USER.md ({}% used):\n{}\n\
 \n\
-Core tools (Nix):  inspect, propose, apply, rollback, audit, memory\n\
+Core tools (Nix):  inspect, propose, audit, memory\n\
 General tools:     read_file, write_file, edit_file, run_bash\n",
         inspect_summary.trim(),
         pending_proposals_section(&cds),
@@ -869,15 +839,16 @@ mod tests {
         )
         .unwrap();
         // Also create memory dir for CoreMemory loading
-        fs::create_dir_all(tmp.join("memory")).unwrap();
-        fs::write(tmp.join("memory/MEMORY.md"), "").unwrap();
-        fs::write(tmp.join("memory/USER.md"), "").unwrap();
+        std::env::set_var("AGNTOS_STATE_DIR", tmp.join("state").to_string_lossy().to_string());
+        fs::create_dir_all(tmp.join("state/memory")).unwrap();
+        fs::write(tmp.join("state/memory/MEMORY.md"), "").unwrap();
+        fs::write(tmp.join("state/memory/USER.md"), "").unwrap();
 
         let prompt = build_system_prompt(&tmp, "test system");
         assert!(prompt.contains("Pending proposals"));
         assert!(prompt.contains("p-xyz"));
         assert!(prompt.contains("Test proposal"));
-        assert!(prompt.contains("apply/dismiss"));
+        std::env::remove_var("AGNTOS_STATE_DIR");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -885,12 +856,14 @@ mod tests {
     fn build_system_prompt_empty_when_no_proposals() {
         let tmp = std::env::temp_dir().join("agntos-llm-test-emptyprompt");
         let _ = fs::remove_dir_all(&tmp);
-        fs::create_dir_all(tmp.join("memory")).unwrap();
-        fs::write(tmp.join("memory/MEMORY.md"), "").unwrap();
-        fs::write(tmp.join("memory/USER.md"), "").unwrap();
+        std::env::set_var("AGNTOS_STATE_DIR", tmp.join("state").to_string_lossy().to_string());
+        fs::create_dir_all(tmp.join("state/memory")).unwrap();
+        fs::write(tmp.join("state/memory/MEMORY.md"), "").unwrap();
+        fs::write(tmp.join("state/memory/USER.md"), "").unwrap();
 
         let prompt = build_system_prompt(&tmp, "test system");
         assert!(!prompt.contains("Pending proposals"));
+        std::env::remove_var("AGNTOS_STATE_DIR");
         let _ = fs::remove_dir_all(&tmp);
     }
 }

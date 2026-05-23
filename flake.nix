@@ -14,6 +14,9 @@
       agntd = final.callPackage ./pkgs/agntd {
         rustPlatform = nixpkgs-unstable.legacyPackages.${final.stdenv.hostPlatform.system}.rustPlatform;
       };
+      agnt = final.callPackage ./pkgs/agnt {
+        rustPlatform = nixpkgs-unstable.legacyPackages.${final.stdenv.hostPlatform.system}.rustPlatform;
+      };
       agntos-branding = final.callPackage ./pkgs/agntos-branding { };
       agntos-fonts = final.callPackage ./pkgs/agntos-fonts { };
       agntos-start-icon = final.callPackage ./pkgs/agntos-start-icon { };
@@ -30,7 +33,7 @@
         ./modules/agntos/base.nix
         ./modules/agntos/agent.nix
         ./modules/agntos/branding.nix
-        ./modules/agntos/desktop-plasma.nix
+        ./modules/agntos/desktop-terminal.nix
         ./modules/agntos/vm.nix
         ./profiles/dev-vm.nix
         ({ ... }: { nixpkgs.overlays = [ agntosOverlay ]; })
@@ -55,7 +58,7 @@
         overlays = [ agntosOverlay ];
       };
     in {
-      inherit (pkgs) agntctl agntd;
+      inherit (pkgs) agnt agntctl agntd;
     };
   };
 }

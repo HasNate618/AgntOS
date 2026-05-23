@@ -33,8 +33,12 @@ pub struct SessionHit {
 }
 
 impl SessionStore {
-    pub fn from_config_dir(config_dir: impl AsRef<Path>) -> Result<Self, String> {
-        let dir = config_dir.as_ref().join("memory");
+    pub fn from_config_dir(_config_dir: impl AsRef<Path>) -> Result<Self, String> {
+        Self::open_store()
+    }
+
+    pub fn open_store() -> Result<Self, String> {
+        let dir = agnt_common::paths::agent_state_dir();
         std::fs::create_dir_all(&dir).map_err(|e| {
             format!(
                 "Failed to create session store dir {}: {}",
@@ -204,8 +208,9 @@ mod tests {
     fn append_and_search() {
         let dir = std::env::temp_dir().join("agntos-session-store-test");
         let _ = std::fs::remove_dir_all(&dir);
+        std::env::set_var("AGNTOS_STATE_DIR", dir.to_string_lossy().to_string());
 
-        let store = SessionStore::from_config_dir(&dir).unwrap();
+        let store = SessionStore::open_store().unwrap();
         let sid = SessionStore::new_session_id();
         store
             .append_turn(&sid, "user", "install hello package", None)

@@ -16,6 +16,7 @@
 //!
 //! [`CoreMemory`] provides `add`, `replace`, `remove`, and `consolidate` operations.
 
+use crate::paths;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -71,8 +72,14 @@ impl std::fmt::Display for SecurityError {
 }
 
 impl CoreMemory {
-    pub fn load(config_dir: impl AsRef<Path>) -> Result<Self, String> {
-        let dir = config_dir.as_ref().join("memory");
+    pub fn load() -> Result<Self, String> {
+        paths::migrate_memory_from_config(paths::nix_config_dir())?;
+        Self::load_at(paths::memory_dir())
+    }
+
+    pub fn load_at(dir: impl AsRef<Path>) -> Result<Self, String> {
+        let dir = dir.as_ref();
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let memory_path = dir.join("MEMORY.md");
         let user_path = dir.join("USER.md");
 
@@ -484,7 +491,7 @@ mod tests {
     fn add_and_usage() {
         let temp = std::env::temp_dir().join("agntos-memory-test-add");
         let _ = std::fs::remove_dir_all(&temp);
-        let mut mem = CoreMemory::load(&temp).unwrap();
+        let mut mem = CoreMemory::load_at(&temp).unwrap();
         mem.add(MemoryFile::Memory, "System", "GPU: QEMU").unwrap();
         assert!(mem.memory.contains("GPU: QEMU"));
         assert!(mem.usage_percent(MemoryFile::Memory) > 0);
@@ -495,7 +502,7 @@ mod tests {
     fn replace_and_remove() {
         let temp = std::env::temp_dir().join("agntos-memory-test-edit");
         let _ = std::fs::remove_dir_all(&temp);
-        let mut mem = CoreMemory::load(&temp).unwrap();
+        let mut mem = CoreMemory::load_at(&temp).unwrap();
         mem.add(MemoryFile::User, "Preferences", "Editor: vim")
             .unwrap();
         mem.replace(MemoryFile::User, "vim", "helix").unwrap();
@@ -516,7 +523,7 @@ mod tests {
     fn consolidate_dedup_and_merge() {
         let temp = std::env::temp_dir().join("agntos-memory-consolidate");
         let _ = std::fs::remove_dir_all(&temp);
-        let mut mem = CoreMemory::load(&temp).unwrap();
+        let mut mem = CoreMemory::load_at(&temp).unwrap();
 
         // Add near-duplicates in the same section
         mem.add(MemoryFile::Memory, "System", "GPU: qemu bochs-drm")

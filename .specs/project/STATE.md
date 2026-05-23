@@ -4,10 +4,10 @@
 
 ## Current Phase
 
-**TLC: `baseline-clean` (complete) → `wedge-a` (next)**
+**TLC: `wedge-a` core shipped — TUI polish next**
 
-1. **Now:** [baseline-clean](../features/baseline-clean/spec.md) — slim repo to core Rust + Nix + honest docs; legacy under `legacy/`; GPL; frozen specs.
-2. **Next:** Wedge A — `agnt` TUI, Cage + Foot + tmux dev VM, policy (`propose` only for LLM), XDG memory path.
+1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) core (XDG state, LLM policy, `agnt` CLI, terminal dev VM).
+2. **Next:** ratatui TUI, socket client for `agnt`, eval-runbook in new VM profile.
 
 Focus after baseline: ship one end-to-end path (`agnt` TUI → `agntd` → `agntctl` → Nix) on a **Cage + Foot + tmux** dev VM.
 
