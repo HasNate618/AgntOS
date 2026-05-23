@@ -1,4 +1,6 @@
+mod socket;
 mod socket_chat;
+mod tui;
 
 use clap::{Parser, Subcommand};
 use std::process::{Command, Stdio};
@@ -12,10 +14,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "Interactive chat (socket client, else foreground agntd)")]
+    #[command(about = "Interactive chat (TUI when terminal, else plain REPL)")]
     Chat {
         #[arg(long)]
         socket: Option<String>,
+        #[arg(long, help = "Line-oriented REPL instead of ratatui TUI")]
+        plain: bool,
         #[arg(long, help = "Always run foreground agntd instead of connecting")]
         foreground: bool,
     },
@@ -34,8 +38,12 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
     let status = match cli.command {
-        None => run_chat(None, false),
-        Some(Commands::Chat { socket, foreground }) => run_chat(socket, foreground),
+        None => run_chat(None, false, false),
+        Some(Commands::Chat {
+            socket,
+            plain,
+            foreground,
+        }) => run_chat(socket, plain, foreground),
         Some(Commands::Daemon { socket }) => exec("agntd", &["--socket", &socket]),
         Some(Commands::System { args }) => {
             let mut argv: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -48,22 +56,27 @@ fn main() {
     std::process::exit(status);
 }
 
-fn run_chat(socket: Option<String>, foreground: bool) -> i32 {
+fn run_chat(socket: Option<String>, plain: bool, foreground: bool) -> i32 {
     if foreground {
         return exec("agntd", &[]);
     }
-    let path = socket.unwrap_or_else(socket_chat::default_socket_path);
-    if socket_chat::socket_available(&path) {
-        match socket_chat::run(&path) {
-            Ok(()) => 0,
-            Err(e) => {
-                eprintln!("agnt: {}", e);
-                1
-            }
-        }
-    } else {
+    let path = socket.unwrap_or_else(socket::default_socket_path);
+    if !socket::socket_available(&path) {
         eprintln!("agnt: no daemon at {} — starting foreground agntd", path);
-        exec("agntd", &[])
+        return exec("agntd", &[]);
+    }
+    let result = if tui::should_use_tui(plain) {
+        tui::run(&path)
+    } else {
+        socket_chat::run(&path)
+    };
+    match result {
+        Ok(()) => 0,
+        Err(e) if e == "quit" => 0,
+        Err(e) => {
+            eprintln!("agnt: {}", e);
+            1
+        }
     }
 }
 

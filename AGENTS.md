@@ -86,7 +86,8 @@ Dev VM (single script):
 ./scripts/dev-vm.sh restart --reset-disk   # fresh qcow when system drifts
 ```
 
-Inside VM: `agnt-tmux` (same layout), window 1 = `agnt` chat, 2 = shell, 3 = `agntd` logs.
+Inside VM: `agnt-tmux` (same layout), window 1 = `agnt` TUI chat, 2 = shell, 3 = `agntd` logs.
+`agnt` uses ratatui on a TTY (`agnt chat --plain` for line mode). Slash: `/help` `/quit` `/clear` `/new` `/cancel` `/model` `/status`.
 
 ## Project layout
 

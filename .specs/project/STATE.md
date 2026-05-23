@@ -4,19 +4,20 @@
 
 ## Current Phase
 
-**TLC: `wedge-a` core + socket client — ratatui TUI next**
+**TLC: `wedge-a` v1 complete — v1.1 polish**
 
-1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) (XDG state, LLM policy, `agnt` CLI + socket client, terminal dev VM, `/mnt/agntos-src` mount fix).
-2. **Next:** ratatui TUI (WA-010), richer approval UX (WA-011).
+1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) v1 (XDG state, LLM policy, `agnt` TUI + socket client, dev VM + `./dev` script).
+2. **Next:** WA-013 slash/audit polish, SKILL.md loader (VISION v1.1).
 
 Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Host entrypoint: `./scripts/dev-vm.sh` (or `./dev`) — build, start, tmux attach, eval.
 
 ### Wedge A checklist
 
 - [x] `agnt` socket client (connects to user `agntd`, falls back to foreground)
+- [x] `agnt` ratatui TUI (default on TTY; `--plain` for line REPL)
 - [x] Dev profile: Cage + Foot + tmux autologin
 - [x] Single agent in VM (`agntd` systemd user service)
-- [ ] `agnt` ratatui TUI (streaming, tool cards)
+- [x] `./scripts/dev-vm.sh` unified host workflow
 - [ ] README / docs aligned with VISION
 - [ ] v1.1: read-only `SKILL.md` + slash commands (see VISION)
 
