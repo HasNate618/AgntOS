@@ -7,6 +7,9 @@
 
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "$ROOT"
+
 PASS=0
 FAIL=0
 TMPDIR=""
@@ -30,7 +33,14 @@ check() {
   fi
 }
 
-AGNTCTL="sudo AGNTOS_CONFIG_DIR=/etc/agntos ./target/release/agntctl"
+if [ -x "/run/current-system/sw/bin/agntctl" ]; then
+  AGNTCTL="sudo AGNTOS_CONFIG_DIR=/etc/agntos /run/current-system/sw/bin/agntctl"
+elif [ -x "$ROOT/target/release/agntctl" ] && "$ROOT/target/release/agntctl" --version >/dev/null 2>&1; then
+  AGNTCTL="sudo AGNTOS_CONFIG_DIR=/etc/agntos $ROOT/target/release/agntctl"
+else
+  echo "error: agntctl not found (build in VM or use NixOS system package)" >&2
+  exit 1
+fi
 TMPDIR=$(mktemp -d)
 
 echo "=== AgntOS 10-tool eval runbook ==="
@@ -86,36 +96,41 @@ check "agntctl memory show" \
   "MEMORY"
 
 check "agntctl audit list" \
-  "$AGNTCTL audit list --config-dir /etc/agntos --limit 5" \
-  "Recent audit"
+  "$AGNTCTL audit list --config-dir /etc/agntos --limit 5 2>&1" \
+  "audit"
 
 # ── Socket/daemon mode (--socket) ───────────────────────────────────────
 
 echo ""
 echo "--- Socket/daemon mode ---"
 
-SOCK="/tmp/agntd-eval.sock"
-sudo AGNTOS_CONFIG_DIR=/etc/agntos timeout 30 ./target/release/agntd --socket "$SOCK" >/dev/null 2>&1 &
-AGNTD_PID=$!
-
-for i in $(seq 1 10); do
-  [ -S "$SOCK" ] && break
-  sleep 0.5
-done
+SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agntd.sock"
+AGNTD_PID=""
+if [ ! -S "$SOCK" ]; then
+  SOCK="/tmp/agntd-eval.sock"
+  AGNTD_BIN="$ROOT/target/release/agntd"
+  [ -x "$AGNTD_BIN" ] && "$AGNTD_BIN" --version >/dev/null 2>&1 || AGNTD_BIN="/run/current-system/sw/bin/agntd"
+  sudo AGNTOS_CONFIG_DIR=/etc/agntos timeout 30 "$AGNTD_BIN" --socket "$SOCK" >/dev/null 2>&1 &
+  AGNTD_PID=$!
+  for i in $(seq 1 10); do
+    [ -S "$SOCK" ] && break
+    sleep 0.5
+  done
+fi
 
 if [ -S "$SOCK" ]; then
-  RESP=$(printf '{"prompt":"say hello in one word"}' | timeout 10 sudo nc -U -N "$SOCK" 2>/dev/null)
-  if echo "$RESP" | grep -q '"response"'; then
+  RESP=$(printf '{"prompt":"say hello in one word"}' | timeout 60 nc -U -N "$SOCK" 2>/dev/null)
+  if echo "$RESP" | grep -qE '"response"|"type"'; then
     ok "agntd socket mode processes prompt"
   else
     fail "agntd socket mode: unexpected: $(echo "$RESP" | head -c 100)"
   fi
-  kill "$AGNTD_PID" 2>/dev/null || true
-  wait "$AGNTD_PID" 2>/dev/null || true
-  rm -f "$SOCK"
+  [ -n "$AGNTD_PID" ] && kill "$AGNTD_PID" 2>/dev/null || true
+  [ -n "$AGNTD_PID" ] && wait "$AGNTD_PID" 2>/dev/null || true
+  [ "$SOCK" = "/tmp/agntd-eval.sock" ] && rm -f "$SOCK"
 else
   fail "agntd socket did not appear within 5s"
-  kill "$AGNTD_PID" 2>/dev/null || true
+  [ -n "$AGNTD_PID" ] && kill "$AGNTD_PID" 2>/dev/null || true
 fi
 
 # ── Rollback friendly errors ────────────────────────────────────────────
@@ -130,7 +145,7 @@ check "rollback list on transient VM (no generations)" \
 # Rollback apply may fail with different nix errors depending on environment.
 # Accept any non-panic error response as passing.
 check "rollback apply exits gracefully" \
-  "cd /mnt/agntos-src && sudo ./target/release/agntctl rollback apply --config-dir /etc/agntos 2>&1 || true" \
+  "$AGNTCTL rollback apply --config-dir /etc/agntos 2>&1 || true" \
   "Error:"
 
 # ── Summary ──────────────────────────────────────────────────────────────

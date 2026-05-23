@@ -4,18 +4,19 @@
 
 ## Current Phase
 
-**TLC: `wedge-a` core shipped — TUI polish next**
+**TLC: `wedge-a` core + socket client — ratatui TUI next**
 
-1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) core (XDG state, LLM policy, `agnt` CLI, terminal dev VM).
-2. **Next:** ratatui TUI, socket client for `agnt`, eval-runbook in new VM profile.
+1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) (XDG state, LLM policy, `agnt` CLI + socket client, terminal dev VM, `/mnt/agntos-src` mount fix).
+2. **Next:** ratatui TUI (WA-010), richer approval UX (WA-011).
 
-Focus after baseline: ship one end-to-end path (`agnt` TUI → `agntd` → `agntctl` → Nix) on a **Cage + Foot + tmux** dev VM.
+Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Rebuild/run VM with `PRJ_ROOT=$(pwd)` and delete stale `agntos-dev.qcow2` when the guest system drifts.
 
-### Wedge A checklist (not started unless noted)
+### Wedge A checklist
 
-- [ ] `agnt` TUI (streaming, tool cards, apply/rollback approval)
-- [ ] Dev profile: Cage + Foot + tmux autologin; remove CC + Plasma from `dev-vm.nix`
-- [ ] Single agent in VM (`agntd` only)
+- [x] `agnt` socket client (connects to user `agntd`, falls back to foreground)
+- [x] Dev profile: Cage + Foot + tmux autologin
+- [x] Single agent in VM (`agntd` systemd user service)
+- [ ] `agnt` ratatui TUI (streaming, tool cards)
 - [ ] README / docs aligned with VISION
 - [ ] v1.1: read-only `SKILL.md` + slash commands (see VISION)
 

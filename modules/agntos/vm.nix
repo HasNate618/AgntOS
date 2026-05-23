@@ -32,16 +32,18 @@ in {
     after = [ "dev-virtio-ports-agntos-source.device" ];
     wants = [ "dev-virtio-ports-agntos-source.device" ];
     wantedBy = [ "multi-user.target" ];
-    serviceConfig.Type = "oneshot";
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
     script = ''
       mkdir -p /mnt/agntos-src
-      if mount -t 9p -o trans=virtio,version=9p2000.L agntos-source /mnt/agntos-src; then
+      if ${pkgs.util-linux}/bin/mount -t 9p -o trans=virtio,version=9p2000.L agntos-source /mnt/agntos-src; then
         echo "agntos: mounted source at /mnt/agntos-src"
       else
         echo "agntos: source mount failed (rebuild/run VM with PRJ_ROOT set to repo root)" >&2
       fi
     '';
-    serviceConfig.RemainAfterExit = true;
   };
 
 }

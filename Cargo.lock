@@ -6,7 +6,9 @@ version = 4
 name = "agnt"
 version = "0.1.0"
 dependencies = [
+ "agnt-common",
  "clap",
+ "serde_json",
 ]
 
 [[package]]

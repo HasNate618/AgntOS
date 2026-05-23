@@ -16,14 +16,14 @@ One credible path: boot dev VM → `agnt` → chat → propose → human/policy 
 | WA-003 | `settings.json` `auto_apply` (dev VM = auto) | Done |
 | WA-004 | Unified `agnt` binary (`chat`, `daemon`, `system`) | Done |
 | WA-005 | Dev VM: Cage + Foot + tmux (no Plasma default) | Done |
+| WA-012 | `agnt` socket client (connect to `agntd`, REPL fallback) | Done |
 
 ## Deferred (v1.1 / polish)
 
 | ID | Item |
 |----|------|
 | WA-010 | Full ratatui TUI (streaming, tool cards, slash commands) |
-| WA-011 | TUI apply/rollback approval UX |
-| WA-012 | `agnt` socket client (today: foreground `agntd` REPL) |
+| WA-011 | TUI apply/rollback approval UX (basic stdin prompt in socket client) |
 
 ## Verification
 

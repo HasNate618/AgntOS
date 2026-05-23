@@ -16,7 +16,7 @@ rustPlatform.buildRustPackage {
   postPatch = ''
     substituteInPlace Cargo.toml \
       --replace-fail $'members = [\n  "crates/agnt-common",\n  "crates/agnt",\n  "crates/agntctl",\n  "crates/agntd",\n]' \
-      $'members = ["crates/agnt"]\ndefault-members = ["crates/agnt"]'
+      $'members = ["crates/agnt-common", "crates/agnt"]\ndefault-members = ["crates/agnt"]'
   '';
 
   cargoLock = {
