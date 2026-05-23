@@ -40,6 +40,7 @@ Commands:
   tmux        SSH and attach dev tmux ($TMUX_SESSION)
   eval        Run 14-check eval runbook in VM
   logs        Tail VM QEMU log ($LOG_FILE)
+  agnt-logs   Tail agntd file log + journal in VM
 
 Environment:
   PRJ_ROOT      Repo root (auto-set)
@@ -163,6 +164,7 @@ cmd_status() {
       echo mount: \$(test -f /mnt/agntos-src/flake.nix && echo ok || echo missing)
       echo agntd: \$(systemctl --user is-active agntd 2>/dev/null || echo inactive)
       echo sock:  \$(test -S \"\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}/agntd.sock\" && echo ok || echo missing)
+      echo log:   \$(test -f \"\${XDG_STATE_HOME:-\$HOME/.local/state}/agntos/agntd.log\" && echo ok || echo missing)
       readlink /run/current-system 2>/dev/null | sed 's|.*/||'
     " 2>/dev/null || true
   else
@@ -207,6 +209,15 @@ cmd_logs() {
   exec tail -f "$LOG_FILE"
 }
 
+cmd_agnt_logs() {
+  if ! ssh_ready; then
+    echo "error: VM not reachable — run: $(basename "$0") start" >&2
+    exit 1
+  fi
+  exec ssh "${SSH_OPTS[@]}" -t "$SSH_USER@localhost" \
+    'LOG="${XDG_STATE_HOME:-$HOME/.local/state}/agntos/agntd.log"; echo "==> $LOG"; tail -n 40 -f "$LOG" 2>/dev/null & T=$!; journalctl --user -u agntd -f; kill $T 2>/dev/null'
+}
+
 cmd_go() {
   local do_build=false
   while [ $# -gt 0 ]; do
@@ -244,6 +255,7 @@ main() {
     tmux) cmd_tmux ;;
     eval) cmd_eval ;;
     logs) cmd_logs ;;
+    agnt-logs) cmd_agnt_logs ;;
     -h|--help|help) usage ;;
     *)
       echo "unknown command: $cmd" >&2

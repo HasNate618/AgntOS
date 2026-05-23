@@ -10,7 +10,19 @@
         ExecStart = "${pkgs.agntd}/bin/agntd --socket %t/agntd.sock";
         Restart = "on-failure";
         RestartSec = 5;
-        Environment = "AGNTOS_CONFIG_DIR=${config.agntos.configDir}";
+        Environment = [
+          "AGNTOS_CONFIG_DIR=${config.agntos.configDir}"
+          "AGNTCTL=${pkgs.agntctl}/bin/agntctl"
+        ];
+        Path = with pkgs; [
+          agntctl
+          coreutils
+          bash
+          nix
+          gnused
+          gnutar
+          gzip
+        ];
         StandardOutput = "journal";
         StandardError = "journal";
       };

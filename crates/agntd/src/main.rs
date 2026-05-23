@@ -31,6 +31,7 @@
 //! - [`util`] — Shared helpers: `agntctl` subprocess, confirmation prompt, `/proc`-based inspection fallback.
 
 mod agent;
+mod log;
 mod llm;
 mod session;
 mod util;
@@ -70,6 +71,7 @@ fn main() {
 
 /// Runs the REPL — interactive mode (original behaviour).
 fn run_repl() {
+    util::log_startup_paths();
     watchdog::start(util::config_dir_str());
 
     print_banner();
@@ -164,9 +166,12 @@ fn run_socket_mode(socket_path: &str) {
         }
     };
 
+    util::log_startup_paths();
+
     let bootstrap = match agent::DaemonBootstrap::from_config_dir(&util::config_dir_str()) {
         Ok(b) => b,
         Err(e) => {
+            log::error(&format!("failed to initialise: {}", e));
             eprintln!("agntd: failed to initialise: {}", e);
             let _ = std::fs::remove_file(socket_path);
             std::process::exit(1);

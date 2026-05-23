@@ -19,6 +19,8 @@ One credible path: boot dev VM → `agnt` → chat → propose → human/policy 
 | WA-012 | `agnt` socket client (connect to `agntd`, REPL fallback) | Done |
 | WA-010 | Ratatui TUI (streaming, tool cards, slash commands) | Done |
 | WA-011 | TUI apply/rollback approval overlay (`y`/`n`) | Done |
+| WA-015 | `agntd` file log (`$XDG_STATE_HOME/agntos/agntd.log`) + tool exec logging | Done |
+| WA-016 | `agntd` systemd `Path` + `AGNTCTL` for `agntctl`/`bash` | Done |
 
 ## Deferred (v1.1 / polish)
 

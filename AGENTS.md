@@ -87,6 +87,8 @@ Dev VM (single script):
 ```
 
 Inside VM: `agnt-tmux` (same layout), window 1 = `agnt` TUI chat, 2 = shell, 3 = `agntd` logs.
+
+**Logs:** `journalctl --user -u agntd -f` and `~/.local/state/agntos/agntd.log` (every `agntctl` exec). Host: `./scripts/dev-vm.sh agnt-logs`.
 `agnt` uses ratatui on a TTY (`agnt chat --plain` for line mode). Slash: `/help` `/quit` `/clear` `/new` `/cancel` `/model` `/status`.
 
 ## Project layout
