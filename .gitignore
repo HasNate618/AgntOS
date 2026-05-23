@@ -11,6 +11,10 @@
 *.raw
 *.img
 
+# Dev VM
+.cache/
+agntos-dev.qcow2
+
 # Local environment
 .direnv/
 .env

@@ -77,9 +77,16 @@ cargo build --release
 cargo fmt
 ```
 
-VM: `nix build --impure .#nixosConfigurations.agntos-dev-vm.config.system.build.vm` then `./result/bin/run-agntos-dev-vm`. SSH on port 2222.
+Dev VM (single script):
 
-Eval: `bash .specs/features/agntos-foundation/eval-runbook.sh` (14 checks)
+```bash
+./scripts/dev-vm.sh          # build if needed, start VM, attach tmux (chat + shell + logs)
+./scripts/dev-vm.sh status   # VM / SSH / mount / agntd
+./scripts/dev-vm.sh eval     # 14-check runbook in guest
+./scripts/dev-vm.sh restart --reset-disk   # fresh qcow when system drifts
+```
+
+Inside VM: `agnt-tmux` (same layout), window 1 = `agnt` chat, 2 = shell, 3 = `agntd` logs.
 
 ## Project layout
 

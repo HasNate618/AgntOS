@@ -9,7 +9,7 @@
 1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) (XDG state, LLM policy, `agnt` CLI + socket client, terminal dev VM, `/mnt/agntos-src` mount fix).
 2. **Next:** ratatui TUI (WA-010), richer approval UX (WA-011).
 
-Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Rebuild/run VM with `PRJ_ROOT=$(pwd)` and delete stale `agntos-dev.qcow2` when the guest system drifts.
+Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Host entrypoint: `./scripts/dev-vm.sh` (or `./dev`) — build, start, tmux attach, eval.
 
 ### Wedge A checklist
 

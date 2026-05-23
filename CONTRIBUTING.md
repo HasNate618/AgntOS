@@ -33,50 +33,35 @@ export AGNTOS_API_KEY=your-key
 
 ## VM workflow
 
-Build:
+One script handles build, run, SSH, tmux, and eval:
 
 ```bash
-export PRJ_ROOT=$(pwd)
-nix build --impure .#nixosConfigurations.agntos-dev-vm.config.system.build.vm
+./scripts/dev-vm.sh              # build (if needed), start VM, attach tmux
+./scripts/dev-vm.sh build        # nix build only (sets PRJ_ROOT for /mnt/agntos-src)
+./scripts/dev-vm.sh start|stop|status
+./scripts/dev-vm.sh ssh          # shell in VM
+./scripts/dev-vm.sh tmux         # attach dev tmux (chat / shell / logs)
+./scripts/dev-vm.sh eval         # 14-check runbook
+./scripts/dev-vm.sh restart --reset-disk   # fresh disk when guest system is stale
 ```
 
-`--impure` is required because `PRJ_ROOT` uses `builtins.getEnv` for the shared folder path.
+Login: `developer` / `agntos` on `localhost:2222`.
 
-Run:
+`--impure` is used automatically because `PRJ_ROOT` enables the 9p virtio mount at `/mnt/agntos-src`.
 
-```bash
-./result/bin/run-agntos-dev-vm
-```
-
-SSH:
-
-```bash
-ssh -p 2222 developer@localhost
-```
-
-Login: `developer` / password `agntos`. Root password also `agntos`.
-
-Shared folder: when `PRJ_ROOT` is set at build time, the repo is shared into the VM at `/mnt/agntos-src` (QEMU 9p virtio). Edit on host, build inside VM.
-
-Inside the VM:
+Inside tmux (or SSH):
 
 ```bash
 agntos          # cd /mnt/agntos-src
-agnt-build      # cargo build --release
-agnt-check      # cargo check
-agnt-test       # cargo test
-agnt-inspect    # cargo run --bin agntctl -- inspect
-agnt-agent      # cargo run --bin agntd
+agnt            # chat (socket client → agntd)
+agnt system inspect
+agnt-tmux       # re-attach dev layout
 ```
 
-Rebuild:
+Guest rebuild after flake changes:
 
 ```bash
-# On host: rebuild the VM closure, then restart VM
-nix build --impure .#nixosConfigurations.agntos-dev-vm.config.system.build.vm
-
-# Inside running VM: after modifying the flake
-sudo nixos-rebuild switch --flake /mnt/agntos-src
+sudo nixos-rebuild switch --flake /mnt/agntos-src#agntos-dev-vm
 ```
 
 Stop:

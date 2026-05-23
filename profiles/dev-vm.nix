@@ -56,6 +56,7 @@
     gcc
     wget
     rustup
+    netcat
     agnt
     agntctl
     agntd
@@ -64,14 +65,11 @@
   programs.bash.interactiveShellInit = ''
     alias agntos='cd /mnt/agntos-src 2>/dev/null || cd ~'
     alias agnt-inspect='agnt system inspect'
-    alias agnt-agent='agnt'
-    if [ -x /mnt/agntos-src/target/release/agntctl ]; then
-      alias agnt-build='cd /mnt/agntos-src && cargo build --release'
-      alias agnt-check='cd /mnt/agntos-src && cargo check'
-      export PATH="/mnt/agntos-src/target/release:$PATH"
-      echo "AgntOS dev: mounted source at /mnt/agntos-src"
+    alias agnt-tmux='agntos-tmux'
+    if [ -d /mnt/agntos-src ]; then
+      echo "AgntOS dev: source at /mnt/agntos-src — run agnt-tmux or agnt"
     else
-      echo "AgntOS dev: use Nix packages (rebuild VM with PRJ_ROOT set to mount source)"
+      echo "AgntOS dev: no source mount (host: ./scripts/dev-vm.sh build)"
     fi
   '';
 
