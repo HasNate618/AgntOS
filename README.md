@@ -17,6 +17,7 @@
 - [What AgntOS Does](#what-agntos-does)
 - [How It Works](#how-it-works)
 - [Why NixOS?](#why-nixos)
+- [AgntOS vs Hermes + NixOS](#agntos-vs-hermes--nixos)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [Tool Catalog](#tool-catalog)
@@ -73,9 +74,42 @@ NixOS is the only OS where an agent can treat the entire machine as a declarativ
 
 NixOS is the foundation. The product is what the agent can do on top of it.
 
+## AgntOS vs Hermes + NixOS
+
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) is a strong general-purpose agent runtime: Python, MCP, skills hub, gateways, cron, and polish. **NixOS** gives you generations, declarative config, and rollback. You can run Hermes on a normal NixOS machine and manage the system yourself.
+
+**AgntOS is the union of “agent that can change the OS” and “OS built for that agent”:**
+
+| | Hermes on NixOS | AgntOS |
+|---|---|---|
+| **System contract** | Agent suggests; you edit `configuration.nix` or home-manager | Agent writes only under `/etc/agntos/`; Nix imports it |
+| **Apply path** | Manual `nixos-rebuild` | `propose` → validate → `apply` / policy / TUI approval → rebuild |
+| **Provenance** | Chat logs (if you keep them) | Every apply stores your prompt in `audit.jsonl` |
+| **Rollback** | You run `nixos-rebuild --rollback` | Same, plus surgical undo of last apply; agent state in XDG survives generations |
+| **Agent tools** | Hermes tool/MCP ecosystem | Ten OS-native tools (`agntctl`); bash for the rest — no MCP in v1 |
+| **Skills** | Hub, auto-discovery, rich runtime | Read-only `SKILL.md` dirs (`/etc/agntos/skills`, `~/.config/agntos/skills`); `/skill-name` in `agnt` |
+
+**When Hermes + NixOS is enough:** you want a daily driver NixOS box and a capable chat agent on the side; you are fine owning flakes, rebuilds, and “why is this package here?” yourself.
+
+**When AgntOS:** you want the agent to **own** system mutations safely, with validation, audit, and rollback as first-class product behavior — not as something you wire up after the fact.
+
+We borrow Hermes-style ideas (memory limits, `SKILL.md`, slash commands) without embedding Hermes; see [VISION.md](.specs/project/VISION.md) decisions D-08 and D-11.
+
 ## Quick Start
 
-### Build and run the dev VM
+### Dev VM (recommended)
+
+From the repo root:
+
+```bash
+./dev          # build if needed, start VM, attach tmux (chat / shell / logs)
+./dev eval     # 14-check foundation eval inside the guest
+./dev status   # VM + agntd health
+```
+
+SSH: `developer@localhost:2222` (password `agntos`). In the VM, run `agnt` for the ratatui chat (or use the **chat** tmux pane).
+
+### Manual build
 
 ```bash
 git clone https://github.com/your-org/agntos
@@ -102,9 +136,10 @@ export AGNTOS_API_KEY=your-key
 ```bash
 agntctl inspect system
 agntctl propose "install htop"
+agnt                    # TUI: /help, /audit, /propose-package (skill)
 
 export AGNTOS_API_KEY=your-key
-agntd
+# agntd runs as a user service in the dev VM; on host: agntd
 ```
 
 ## Architecture
@@ -136,8 +171,11 @@ flowchart LR
   memory/            MEMORY.md + USER.md + sessions.db (SQLite FTS5)
   audit.jsonl        Append-only action log
   models.toml        LLM endpoint configuration
+  skills/            System SKILL.md bundles (read-only in v1.1)
   flake-info         Flake URI for nixos-rebuild --flake
 ```
+
+Agent state (sessions, curated memory copies, `agntd.log`) lives under `~/.local/state/agntos/` and is separate from `/etc/agntos/` so it survives `nixos-rebuild --rollback`.
 
 ## Tool Catalog
 

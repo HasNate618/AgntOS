@@ -77,14 +77,18 @@ cargo build --release
 cargo fmt
 ```
 
-Dev VM (single script):
+Dev VM (single script; repo root `./dev` is the same entrypoint):
 
 ```bash
-./scripts/dev-vm.sh          # build if needed, start VM, attach tmux (chat + shell + logs)
-./scripts/dev-vm.sh status   # VM / SSH / mount / agntd
-./scripts/dev-vm.sh eval     # 14-check runbook in guest
-./scripts/dev-vm.sh restart --reset-disk   # fresh qcow when system drifts
+./dev build                  # nix build guest closure (flake source = git tree; untracked files are omitted)
+./dev restart                # required after build — running VM keeps old agnt/agntd until restart
+./dev                        # build if needed, start VM, attach tmux (chat + shell + logs)
+./dev status                 # VM / SSH / mount / agntd
+./dev eval                   # 14-check runbook in guest
+./dev restart --reset-disk   # fresh qcow when guest system drifts
 ```
+
+**Agents:** After any implementation turn that changes Rust, Nix modules, or guest packages, run `./dev build && ./dev restart` before claiming done. `cargo test` alone does not update the VM.
 
 Inside VM: `agnt-tmux` (same layout), window 1 = `agnt` TUI chat, 2 = shell, 3 = `agntd` logs.
 

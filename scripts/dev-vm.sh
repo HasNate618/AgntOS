@@ -95,6 +95,7 @@ cmd_build() {
   echo "==> PRJ_ROOT=$PRJ_ROOT"
   echo "==> nix build dev VM (--impure for PRJ_ROOT / 9p mount)"
   (cd "$ROOT" && nix build --impure .#nixosConfigurations.agntos-dev-vm.config.system.build.vm)
+  echo "==> Build OK — run: $(basename "$0") restart   (new agnt/agntd are in the system closure, not the running VM until restart)"
 }
 
 cmd_start() {
