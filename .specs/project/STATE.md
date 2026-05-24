@@ -4,10 +4,10 @@
 
 ## Current Phase
 
-**TLC: `wedge-a` v1 complete — v1.1 polish**
+**TLC: wedge-a v1.2 complete — greenfield / gateway next**
 
-1. **Done:** [baseline-clean](../features/baseline-clean/spec.md), [wedge-a](../features/wedge-a/spec.md) v1 (XDG state, LLM policy, `agnt` TUI + socket client, dev VM + `./dev` script).
-2. **Next:** WA-013 slash/audit polish, SKILL.md loader (VISION v1.1).
+1. **Done:** [wedge-a](../features/wedge-a/spec.md) v1 + WA-013/014, [tui-polish](../features/tui-polish/spec.md).
+2. **Next:** greenfield workstation edition, `web_fetch`/`web_search`, `agnt-gateway` (see ROADMAP).
 
 Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Host entrypoint: `./scripts/dev-vm.sh` (or `./dev`) — build, start, tmux attach, eval.
 
@@ -18,8 +18,10 @@ Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage 
 - [x] Dev profile: Cage + Foot + tmux autologin
 - [x] Single agent in VM (`agntd` systemd user service)
 - [x] `./scripts/dev-vm.sh` unified host workflow
-- [ ] README / docs aligned with VISION
-- [ ] v1.1: read-only `SKILL.md` + slash commands (see VISION)
+- [x] README / docs aligned with VISION (Hermes comparison, `./dev` quick start)
+- [x] v1.1: read-only `SKILL.md` + slash commands (WA-013)
+- [x] WA-014: richer tool-arg display in TUI
+- [x] TUI polish: streaming, thinking, markdown, scroll ([tui-polish](../features/tui-polish/spec.md))
 
 ### Parked (do not extend without STATE update)
 

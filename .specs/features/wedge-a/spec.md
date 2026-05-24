@@ -21,13 +21,10 @@ One credible path: boot dev VM → `agnt` → chat → propose → human/policy 
 | WA-011 | TUI apply/rollback approval overlay (`y`/`n`) | Done |
 | WA-015 | `agntd` file log (`$XDG_STATE_HOME/agntos/agntd.log`) + tool exec logging | Done |
 | WA-016 | `agntd` systemd `Path` + `AGNTCTL` for `agntctl`/`bash` | Done |
+| WA-013 | TUI: `/audit`, `/skills`, read-only SKILL.md loader + sample skills | Done |
 
-## Deferred (v1.1 / polish)
-
-| ID | Item |
-|----|------|
-| WA-013 | TUI: `/audit`, session list, read-only SKILL.md loader |
-| WA-014 | Richer tool-arg display in tool cards |
+| WA-014 | Richer tool-arg display in tool cards | Done |
+| — | TUI polish: streaming, thinking, markdown, scroll ([tui-polish](../tui-polish/spec.md)) | Done |
 
 ## Verification
 

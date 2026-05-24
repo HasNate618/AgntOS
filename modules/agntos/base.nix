@@ -79,6 +79,7 @@ in
         "d ${config.agntos.configDir}/proposals 0775 root agntos -"
         "d ${config.agntos.configDir}/services 0755 root root -"
         "d ${config.agntos.configDir}/home 0755 root root -"
+        "d ${config.agntos.configDir}/skills 0755 root root -"
         "d ${config.agntos.configDir}/memory 0775 root agntos -"
         "f ${config.agntos.configDir}/memory/MEMORY.md 0664 root agntos -"
         "f ${config.agntos.configDir}/memory/USER.md 0664 root agntos -"
@@ -114,6 +115,8 @@ in
         chmod 664 /etc/agntos/models.toml
         chown root:agntos /etc/agntos/models.toml
       '';
+
+      environment.etc."agntos/skills".source = ./skills;
 
       environment.systemPackages = with pkgs; [
         nixos-rebuild
