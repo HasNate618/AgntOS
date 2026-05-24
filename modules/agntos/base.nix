@@ -74,8 +74,8 @@ in
       # Create AgntOS config directory tree
       systemd.tmpfiles.rules = [
         "d ${config.agntos.configDir} 0755 root root -"
-        "d ${config.agntos.configDir}/packages 0755 root root -"
-        "d ${config.agntos.configDir}/options 0755 root root -"
+        "d ${config.agntos.configDir}/packages 0775 root agntos -"
+        "d ${config.agntos.configDir}/options 0775 root agntos -"
         "d ${config.agntos.configDir}/proposals 0775 root agntos -"
         "d ${config.agntos.configDir}/services 0755 root root -"
         "d ${config.agntos.configDir}/home 0755 root root -"
@@ -114,6 +114,15 @@ in
         fi
         chmod 664 /etc/agntos/models.toml
         chown root:agntos /etc/agntos/models.toml
+      '';
+
+      system.activationScripts.agntos-writable = lib.stringAfter ["etc"] ''
+        for d in packages options; do
+          if [ -d ${cfgDir}/$d ]; then
+            chgrp agntos ${cfgDir}/$d
+            chmod 775 ${cfgDir}/$d
+          fi
+        done
       '';
 
       environment.etc."agntos/skills".source = ./skills;
