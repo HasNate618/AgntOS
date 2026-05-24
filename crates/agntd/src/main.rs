@@ -337,6 +337,8 @@ fn handle_persistent_session(
                     ];
 
                     let mut depth = 0;
+                    let mut turn_sent = false;
+                    let mut last_content = String::new();
                     while depth < 8 {
                         depth += 1;
                         let resp = match runtime.block_on(client.complete_streaming_to_writer(
@@ -357,6 +359,7 @@ fn handle_persistent_session(
                                 break;
                             }
                         };
+                        last_content = resp.content.clone();
                         messages.push(resp.assistant_message.clone());
 
                         if resp.tool_calls.is_empty() {
@@ -368,6 +371,7 @@ fn handle_persistent_session(
                                 "{}",
                                 serde_json::to_string(&done).unwrap()
                             );
+                            turn_sent = true;
                             break;
                         }
 
@@ -444,6 +448,23 @@ fn handle_persistent_session(
                                 "content": tool_content,
                             }));
                         }
+                    }
+
+                    if !turn_sent {
+                        let content = if last_content.is_empty() {
+                            "Turn ended (tool depth limit reached).".to_string()
+                        } else {
+                            format!(
+                                "{}\n\n(turn ended: tool depth limit)",
+                                last_content
+                            )
+                        };
+                        let done = ServerMessage::TurnComplete { content };
+                        let _ = writeln!(
+                            &mut writer_clone,
+                            "{}",
+                            serde_json::to_string(&done).unwrap()
+                        );
                     }
 
                     *gate.lock().unwrap() = None;
@@ -529,6 +550,7 @@ fn handle_persistent_session(
                 let _ = writeln!(writer, "{}", serde_json::to_string(&audit_msg).unwrap());
             }
             ClientMessage::Cancel {} => {
+                chatting.store(false, Ordering::SeqCst);
                 let cancel_msg = ServerMessage::TurnComplete {
                     content: "(cancelled)".to_string(),
                 };

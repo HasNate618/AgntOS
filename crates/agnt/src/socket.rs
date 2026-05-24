@@ -106,6 +106,9 @@ impl SocketSession {
                     }
                 }
             }
+            let _ = tx.send(ServerEvent::Error {
+                message: "disconnected from agntd".into(),
+            });
         });
 
         Ok((
