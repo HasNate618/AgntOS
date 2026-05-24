@@ -112,8 +112,10 @@ in
         if [ ! -s /etc/agntos/models.toml ]; then
           cp /etc/agntos/models.toml.example /etc/agntos/models.toml
         fi
-        chmod 664 /etc/agntos/models.toml
-        chown root:agntos /etc/agntos/models.toml
+        if [ -w /etc/agntos/models.toml ]; then
+          chmod 664 /etc/agntos/models.toml
+          chown root:agntos /etc/agntos/models.toml
+        fi
       '';
 
       system.activationScripts.agntos-writable = lib.stringAfter ["etc"] ''

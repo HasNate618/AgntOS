@@ -1,5 +1,11 @@
 { config, pkgs, lib, ... }:
 
+let
+  devModelsToml = pkgs.writeText "agntos-dev-models.toml" (
+    builtins.readFile ./dev-models.toml
+  );
+in
+
 {
   agntos.enable = true;
   agntos.edition = "dev";
@@ -10,17 +16,8 @@
     auto_apply = "manual";
   };
 
-  environment.etc."agntos/models.toml".text = ''
-    [default]
-    endpoint = "http://10.0.0.45/bifrost/v1"
-    model = "cohere/command-a-plus-05-2026"
-    supports_tools = false
-
-    [routing]
-    chat = "default"
-    inspect = "default"
-    propose = "default"
-    memory = "default"
+  system.activationScripts.agntos-dev-models = lib.stringAfter ["agntos-models"] ''
+    install -m 0664 -o root -g agntos ${devModelsToml} /etc/agntos/models.toml
   '';
 
   boot.loader.systemd-boot.enable = true;
