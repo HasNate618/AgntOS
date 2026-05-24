@@ -34,6 +34,7 @@ mod agent;
 mod log;
 mod llm;
 mod session;
+mod turn_guard;
 mod util;
 mod watchdog;
 
@@ -49,6 +50,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::agent::{execute_tool_call_gui, get_pending_proposal_ids, SharedApprovalGate};
+use crate::turn_guard::TurnGuard;
 use crate::watchdog::EventSender;
 use agnt_common::wire::{AuditRequestAction, ClientMessage, ServerMessage, ToolCallStatus};
 
@@ -336,7 +338,18 @@ fn handle_persistent_session(
                         json!({"role": "user", "content": prompt_clone}),
                     ];
 
-                    loop {
+                    let mut guard = TurnGuard::new();
+                    'turn: loop {
+                        if let Some(reason) = guard.record_llm_step() {
+                            let done = ServerMessage::TurnComplete { content: reason };
+                            let _ = writeln!(
+                                &mut writer_clone,
+                                "{}",
+                                serde_json::to_string(&done).unwrap()
+                            );
+                            break;
+                        }
+
                         let resp = match runtime.block_on(client.complete_streaming_to_writer(
                             &messages,
                             &tools,
@@ -401,6 +414,7 @@ fn handle_persistent_session(
                             }
 
                             let result = execute_tool_call_gui(tc, Some(&prompt), gate.clone());
+                            let tool_ok = result.is_ok();
 
                             match &result {
                                 Ok(output) => {
@@ -441,6 +455,18 @@ fn handle_persistent_session(
                                 "tool_call_id": tc.id.clone(),
                                 "content": tool_content,
                             }));
+
+                            if let Some(reason) =
+                                guard.record_tool(&tc.name, &tc.arguments, tool_ok)
+                            {
+                                let done = ServerMessage::TurnComplete { content: reason };
+                                let _ = writeln!(
+                                    &mut writer_clone,
+                                    "{}",
+                                    serde_json::to_string(&done).unwrap()
+                                );
+                                break 'turn;
+                            }
                         }
                     }
 

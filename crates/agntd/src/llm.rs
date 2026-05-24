@@ -482,8 +482,10 @@ Rules:\n\
   the user runs `agnt system apply <id>` or the TUI approves when ready.\n\
 - After propose, tell the user the proposal id and how to apply it.\n\
 - Prefer edit_file over run_bash for modifying files.\n\
-- Use run_bash for ls, grep, find, systemctl, journalctl, dmesg,\n\
-  and any command without a dedicated tool.\n\
+- Use run_bash for ls, grep, systemctl, journalctl, dmesg — not for\n\
+  installing packages (use propose install <name> with a real nixpkgs attr).\n\
+- If a tool fails twice, stop retrying the same approach; explain and ask the user.\n\
+- Do not call apply yourself; the user approves proposals in the TUI.\n\
 - Store preferences, intent, workflow patterns, and non-derivable user context
   in memory. Do NOT store facts you can re-derive via inspect (CPU, RAM,
   packages, disk — those are re-inspectable at any time).\n\

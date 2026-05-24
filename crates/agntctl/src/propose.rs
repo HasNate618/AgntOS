@@ -325,10 +325,23 @@ fn generate_id() -> String {
 }
 
 fn sanitize_package_name(name: &str) -> String {
-    name.trim()
-        .to_lowercase()
-        .replace(' ', "-")
-        .replace(|c: char| !c.is_alphanumeric() && c != '-', "")
+    const PROSE: &[&str] = &[
+        "for", "to", "and", "with", "testing", "please", "the", "a", "an",
+    ];
+    let words: Vec<String> = name
+        .trim()
+        .split_whitespace()
+        .map(|w| w.to_lowercase())
+        .collect();
+    if words.is_empty() {
+        return String::new();
+    }
+    let raw = if words.iter().any(|w| PROSE.contains(&w.as_str())) {
+        words[0].clone()
+    } else {
+        words.join("-")
+    };
+    raw.replace(|c: char| !c.is_alphanumeric() && c != '-', "")
 }
 
 fn to_services_path(name: &str) -> String {
@@ -347,6 +360,13 @@ mod tests {
         assert_eq!(p.files_to_write[0].0, "packages/firefox.nix");
         assert!(p.files_to_write[0].1.contains("lib.mkAfter"));
         assert!(p.files_to_delete.is_empty());
+    }
+
+    #[test]
+    fn install_uses_first_word_not_prose_suffix() {
+        let p = generate("install curl for testing").unwrap();
+        assert!(p.nix_changes.contains("pkgs.curl"));
+        assert!(!p.nix_changes.contains("curl-for-testing"));
     }
 
     #[test]
@@ -419,6 +439,7 @@ mod tests {
         assert_eq!(sanitize_package_name("VS Code"), "vs-code");
         assert_eq!(sanitize_package_name("Firefox"), "firefox");
         assert_eq!(sanitize_package_name("  Docker "), "docker");
+        assert_eq!(sanitize_package_name("curl for testing"), "curl");
     }
 
     #[test]
