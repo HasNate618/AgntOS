@@ -27,6 +27,28 @@ in {
   users.users.root.initialPassword = "agntos";
 
   boot.initrd.kernelModules = [ "9p" "9pnet_virtio" ];
+
+  # qemu-vm duplicates overlay options in fstab (x-initrd.mount), which breaks
+  # merged /nix/store: paths visible in /nix/.ro-store are invisible to nix-build.
+  fileSystems."/nix/store" = lib.mkForce {
+    device = "overlay";
+    fsType = "overlay";
+    options = [
+      "lowerdir=/sysroot/nix/.ro-store"
+      "upperdir=/sysroot/nix/.rw-store/upper"
+      "workdir=/sysroot/nix/.rw-store/work"
+    ];
+  };
+
+  fileSystems."/nix/.rw-store" = lib.mkForce {
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=8G"
+    ];
+    neededForBoot = true;
+  };
+
   systemd.services.agntos-mount = lib.mkIf hasSrc {
     description = "Mount AgntOS source shared folder";
     after = [ "dev-virtio-ports-agntos-source.device" ];

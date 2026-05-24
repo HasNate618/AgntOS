@@ -12,6 +12,8 @@ in
   agntos.agent.enable = true;
   agntos.rebuild.flakeUri = "/mnt/agntos-src#agntos-dev-vm";
 
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+
   environment.etc."agntos/settings.json".text = builtins.toJSON {
     auto_apply = "manual";
   };

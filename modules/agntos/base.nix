@@ -84,6 +84,7 @@ in
         "f ${config.agntos.configDir}/memory/MEMORY.md 0664 root agntos -"
         "f ${config.agntos.configDir}/memory/USER.md 0664 root agntos -"
         "f ${config.agntos.configDir}/models.toml 0664 root agntos -"
+        "f ${config.agntos.configDir}/audit.jsonl 0664 root agntos -"
       ];
 
       environment.etc."agntos/models.toml.example".text = ''
@@ -125,6 +126,10 @@ in
             chmod 775 ${cfgDir}/$d
           fi
         done
+        if [ -f ${cfgDir}/audit.jsonl ]; then
+          chgrp agntos ${cfgDir}/audit.jsonl
+          chmod 664 ${cfgDir}/audit.jsonl
+        fi
       '';
 
       environment.etc."agntos/skills".source = ./skills;
