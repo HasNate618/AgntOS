@@ -77,6 +77,7 @@ struct RawToolCall {
 #[allow(dead_code)]
 struct RawFunctionCall {
     name: String,
+    #[serde(deserialize_with = "deserialize_tool_arguments")]
     arguments: String,
 }
 
@@ -561,6 +562,11 @@ fn completion_payload(
     tools: &[Value],
     stream: bool,
 ) -> Value {
+    let messages: Vec<Value> = messages
+        .iter()
+        .cloned()
+        .map(normalize_message_for_api)
+        .collect();
     let mut payload = serde_json::Map::new();
     payload.insert("model".into(), json!(profile.model));
     payload.insert("messages".into(), json!(messages));
@@ -670,6 +676,29 @@ mod assistant_message_tests {
         assert!(msg.get("content").is_none());
         assert!(msg.get("tool_calls").is_some());
     }
+
+    #[test]
+    fn normalize_object_arguments_to_string() {
+        let msg = json!({
+            "role": "assistant",
+            "tool_calls": [{
+                "id": "1",
+                "type": "function",
+                "function": { "name": "inspect", "arguments": { "target": "cpu" } }
+            }]
+        });
+        let out = normalize_message_for_api(msg);
+        let args = out["tool_calls"][0]["function"]["arguments"]
+            .as_str()
+            .unwrap();
+        assert_eq!(args, r#"{"target":"cpu"}"#);
+    }
+
+    #[test]
+    fn canonical_empty_arguments_becomes_object() {
+        assert_eq!(canonical_arguments_str(""), "{}");
+        assert_eq!(canonical_arguments_str("   "), "{}");
+    }
 }
 
 // ── Streaming SSE types ─────────────────────────────────────────────────────
@@ -753,7 +782,8 @@ fn finalize_stream_tool_calls(buf: &[StreamToolCall]) -> (Vec<ToolCall>, Vec<Val
             .function
             .as_ref()
             .and_then(|f| f.arguments.clone())
-            .unwrap_or_default();
+            .map(|s| canonical_arguments_str(&s))
+            .unwrap_or_else(|| "{}".to_string());
         let args = serde_json::from_str::<Value>(&args_str).unwrap_or_else(|_| json!({}));
         tool_calls.push(ToolCall {
             id: id.clone(),
@@ -767,6 +797,66 @@ fn finalize_stream_tool_calls(buf: &[StreamToolCall]) -> (Vec<ToolCall>, Vec<Val
         }));
     }
     (tool_calls, raw)
+}
+
+fn canonical_arguments_str(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "{}".to_string();
+    }
+    if serde_json::from_str::<Value>(trimmed).is_ok() {
+        return trimmed.to_string();
+    }
+    "{}".to_string()
+}
+
+fn stringify_tool_arguments(v: &Value) -> String {
+    match v {
+        Value::String(s) => canonical_arguments_str(s),
+        Value::Object(_) | Value::Array(_) => {
+            serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())
+        }
+        _ => "{}".to_string(),
+    }
+}
+
+fn deserialize_tool_arguments<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(deserializer)?;
+    Ok(stringify_tool_arguments(&v))
+}
+
+fn normalize_message_for_api(msg: Value) -> Value {
+    let Some(obj) = msg.as_object() else {
+        return msg;
+    };
+    if obj.get("role").and_then(|r| r.as_str()) != Some("assistant") {
+        return msg;
+    }
+    let Some(tool_calls) = obj.get("tool_calls").and_then(|v| v.as_array()) else {
+        return msg;
+    };
+    let normalized_calls: Vec<Value> = tool_calls
+        .iter()
+        .map(|tc| {
+            let mut tc = tc.clone();
+            if let Some(func) = tc.get_mut("function") {
+                if let Some(obj) = func.as_object_mut() {
+                    let args = obj.get("arguments").cloned().unwrap_or(Value::Null);
+                    obj.insert(
+                        "arguments".to_string(),
+                        Value::String(stringify_tool_arguments(&args)),
+                    );
+                }
+            }
+            tc
+        })
+        .collect();
+    let mut out = obj.clone();
+    out.insert("tool_calls".to_string(), Value::Array(normalized_calls));
+    Value::Object(out)
 }
 
 #[cfg(test)]
