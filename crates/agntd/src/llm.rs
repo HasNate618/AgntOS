@@ -176,11 +176,16 @@ impl LlmClient {
                     Err(_) => continue,
                 };
                 if let Some(choice) = parsed.choices.into_iter().next() {
-                    if let Some(c) = stream_delta_text(&choice.delta) {
+                    if let Some(c) = choice.delta.content.as_ref().filter(|s| !s.is_empty()) {
                         print!("{}", c);
                         use std::io::Write;
                         let _ = std::io::stdout().flush();
-                        content.push_str(&c);
+                        content.push_str(c);
+                    }
+                    if let Some(r) = choice.delta.reasoning.as_ref().filter(|s| !s.is_empty()) {
+                        print!("\x1b[2m{}\x1b[0m", r);
+                        use std::io::Write;
+                        let _ = std::io::stdout().flush();
                     }
                     for tc in choice.delta.tool_calls.unwrap_or_default() {
                         merge_stream_tool_call(&mut tool_call_buf, tc);
@@ -195,15 +200,7 @@ impl LlmClient {
 
         let (tool_calls, raw_tool_calls) = finalize_stream_tool_calls(&tool_call_buf);
 
-        let assistant_message = if raw_tool_calls.is_empty() {
-            json!({ "role": "assistant", "content": content })
-        } else {
-            json!({
-                "role": "assistant",
-                "content": if content.is_empty() { serde_json::Value::String(String::new()) } else { serde_json::Value::String(content.clone()) },
-                "tool_calls": raw_tool_calls,
-            })
-        };
+        let assistant_message = build_assistant_message(&content, &raw_tool_calls);
 
         Ok(AssistantResponse {
             assistant_message,
@@ -277,12 +274,12 @@ impl LlmClient {
                     Err(_) => continue,
                 };
                 if let Some(choice) = parsed.choices.into_iter().next() {
-                    if let Some(c) = stream_delta_text(&choice.delta) {
-                        content.push_str(&c);
-                        let token_msg = ServerMessage::Token { content: c.clone() };
-                        if let Ok(json) = serde_json::to_string(&token_msg) {
-                            let _ = writeln!(writer, "{}", json);
-                        }
+                    if let Some(c) = choice.delta.content.as_ref().filter(|s| !s.is_empty()) {
+                        content.push_str(c);
+                        emit_token(writer, c, agnt_common::wire::TokenChannel::Content);
+                    }
+                    if let Some(r) = choice.delta.reasoning.as_ref().filter(|s| !s.is_empty()) {
+                        emit_token(writer, r, agnt_common::wire::TokenChannel::Thinking);
                     }
                     for tc in choice.delta.tool_calls.unwrap_or_default() {
                         merge_stream_tool_call(&mut tool_call_buf, tc);
@@ -293,15 +290,7 @@ impl LlmClient {
 
         let (tool_calls, raw_tool_calls) = finalize_stream_tool_calls(&tool_call_buf);
 
-        let assistant_message = if raw_tool_calls.is_empty() {
-            json!({ "role": "assistant", "content": content })
-        } else {
-            json!({
-                "role": "assistant",
-                "content": if content.is_empty() { serde_json::Value::String(String::new()) } else { serde_json::Value::String(content.clone()) },
-                "tool_calls": raw_tool_calls,
-            })
-        };
+        let assistant_message = build_assistant_message(&content, &raw_tool_calls);
 
         Ok(AssistantResponse {
             assistant_message,
@@ -592,13 +581,18 @@ fn message_text(content: Option<String>, reasoning: Option<String>) -> String {
         .unwrap_or_default()
 }
 
-fn stream_delta_text(delta: &StreamDelta) -> Option<String> {
-    if let Some(c) = &delta.content {
-        if !c.is_empty() {
-            return Some(c.clone());
-        }
+fn emit_token(
+    writer: &mut impl std::io::Write,
+    content: &str,
+    channel: agnt_common::wire::TokenChannel,
+) {
+    let token_msg = ServerMessage::Token {
+        content: content.to_string(),
+        channel,
+    };
+    if let Ok(json) = serde_json::to_string(&token_msg) {
+        let _ = writeln!(writer, "{}", json);
     }
-    delta.reasoning.clone().filter(|s| !s.is_empty())
 }
 
 #[allow(dead_code)]
@@ -643,21 +637,39 @@ fn parse_completion_response(body: &str) -> Result<AssistantResponse, String> {
         }
     }
 
-    let assistant_message = if raw_tool_calls.is_empty() {
-        json!({ "role": "assistant", "content": content })
-    } else {
-        json!({
-            "role": "assistant",
-            "content": if content.is_empty() { serde_json::Value::String(String::new()) } else { serde_json::Value::String(content.clone()) },
-            "tool_calls": raw_tool_calls,
-        })
-    };
+    let assistant_message = build_assistant_message(&content, &raw_tool_calls);
 
     Ok(AssistantResponse {
         assistant_message,
         content,
         tool_calls,
     })
+}
+
+fn build_assistant_message(content: &str, raw_tool_calls: &[Value]) -> Value {
+    if raw_tool_calls.is_empty() {
+        json!({ "role": "assistant", "content": content })
+    } else {
+        json!({
+            "role": "assistant",
+            "tool_calls": raw_tool_calls,
+        })
+    }
+}
+
+#[cfg(test)]
+mod assistant_message_tests {
+    use super::*;
+
+    #[test]
+    fn tool_calls_omit_content_for_cohere_compat() {
+        let msg = build_assistant_message(
+            "reasoning text",
+            &[json!({"id": "1", "type": "function", "function": {"name": "inspect", "arguments": "{}"}})],
+        );
+        assert!(msg.get("content").is_none());
+        assert!(msg.get("tool_calls").is_some());
+    }
 }
 
 // ── Streaming SSE types ─────────────────────────────────────────────────────

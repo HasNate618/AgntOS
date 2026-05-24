@@ -1,3 +1,5 @@
+mod markdown;
+mod skills;
 mod socket;
 mod socket_chat;
 mod tui;

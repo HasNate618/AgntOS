@@ -49,9 +49,17 @@ pub fn run(socket_path: &str) -> Result<(), String> {
         let mut assistant = String::new();
         loop {
             match session.recv_event() {
-                Ok(ServerEvent::Token(content)) => {
-                    print!("{}", content);
-                    assistant.push_str(&content);
+                Ok(ServerEvent::Token { content, channel }) => {
+                    use agnt_common::wire::TokenChannel;
+                    match channel {
+                        TokenChannel::Thinking => {
+                            print!("\x1b[2m{}\x1b[0m", content);
+                        }
+                        TokenChannel::Content => {
+                            print!("{}", content);
+                            assistant.push_str(&content);
+                        }
+                    }
                     let _ = std::io::stdout().flush();
                 }
                 Ok(ServerEvent::ToolCall { name, status, .. }) => {

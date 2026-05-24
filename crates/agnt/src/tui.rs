@@ -1,5 +1,8 @@
+use crate::markdown;
+use crate::skills;
 use crate::socket::{ServerEvent, SessionInfo, SocketSession};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use agnt_common::wire::TokenChannel;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
@@ -11,6 +14,7 @@ use std::time::{Duration, Instant};
 #[derive(Clone)]
 enum ChatLine {
     User(String),
+    Thinking(String),
     Assistant(String),
     Tool {
         name: String,
@@ -31,11 +35,14 @@ struct App {
     model: String,
     lines: Vec<ChatLine>,
     input: String,
-    scroll: u16,
+    scroll_y: usize,
+    follow_tail: bool,
+    last_viewport_rows: usize,
     busy: bool,
     status: String,
     approval: Option<ApprovalState>,
     assistant_buf: String,
+    thinking_buf: String,
 }
 
 pub fn should_use_tui(plain: bool) -> bool {
@@ -44,9 +51,13 @@ pub fn should_use_tui(plain: bool) -> bool {
 
 pub fn run(socket_path: &str) -> Result<(), String> {
     let (mut session, info) = SocketSession::connect(socket_path)?;
+    let mut stdout = std::io::stdout();
+    crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)
+        .map_err(|e| e.to_string())?;
     let mut terminal = ratatui::init();
     let result = run_loop(&mut terminal, &mut session, info);
     ratatui::restore();
+    let _ = crossterm::execute!(stdout, crossterm::event::DisableMouseCapture);
     result
 }
 
@@ -61,12 +72,13 @@ fn run_loop(
 
     loop {
         terminal
-            .draw(|f| draw_ui(f, &app))
+            .draw(|f| draw_ui(f, &mut app))
             .map_err(|e| e.to_string())?;
 
         let timeout = tick.saturating_sub(last_tick.elapsed());
         if event::poll(timeout).map_err(|e| e.to_string())? {
-            if let Event::Key(key) = event::read().map_err(|e| e.to_string())? {
+            match event::read().map_err(|e| e.to_string())? {
+                Event::Key(key) => {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
@@ -77,6 +89,21 @@ fn run_loop(
                 } else if handle_input_key(&mut app, session, key.code, key.modifiers)? {
                     return Ok(());
                 }
+                }
+                Event::Mouse(m) => {
+                    match m.kind {
+                        MouseEventKind::ScrollUp => {
+                            app.follow_tail = false;
+                            app.scroll_y = app.scroll_y.saturating_sub(3);
+                        }
+                        MouseEventKind::ScrollDown => {
+                            app.follow_tail = false;
+                            app.scroll_y = app.scroll_y.saturating_add(3);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -97,11 +124,14 @@ impl App {
             model: info.model.clone(),
             lines: Vec::new(),
             input: String::new(),
-            scroll: 0,
+            scroll_y: 0,
+            follow_tail: true,
+            last_viewport_rows: 10,
             busy: false,
             status: format!("{} · {}", info.profile, info.model),
             approval: None,
             assistant_buf: String::new(),
+            thinking_buf: String::new(),
         };
         app.push_system(format!(
             "Connected (model: {}). /help for commands.",
@@ -118,25 +148,44 @@ impl App {
 
     fn push_user(&mut self, text: impl Into<String>) {
         self.lines.push(ChatLine::User(text.into()));
-        self.scroll = u16::MAX;
+        self.scroll_bottom();
     }
 
     fn push_system(&mut self, text: impl Into<String>) {
         self.lines.push(ChatLine::System(text.into()));
-        self.scroll = u16::MAX;
+        self.scroll_bottom();
     }
 
     fn push_error(&mut self, text: impl Into<String>) {
         self.lines.push(ChatLine::Error(text.into()));
-        self.scroll = u16::MAX;
+        self.scroll_bottom();
     }
 
-    fn flush_assistant(&mut self) {
+    fn flush_thinking(&mut self) {
+        if !self.thinking_buf.is_empty() {
+            let text = std::mem::take(&mut self.thinking_buf);
+            self.lines.push(ChatLine::Thinking(text));
+            self.scroll_bottom();
+        }
+    }
+
+    fn flush_streaming(&mut self) {
+        self.flush_thinking();
         if !self.assistant_buf.is_empty() {
             let text = std::mem::take(&mut self.assistant_buf);
             self.lines.push(ChatLine::Assistant(text));
-            self.scroll = u16::MAX;
+            self.scroll_bottom();
         }
+    }
+
+    fn scroll_bottom(&mut self) {
+        if self.follow_tail {
+            self.scroll_y = usize::MAX;
+        }
+    }
+
+    fn page_step(&self) -> usize {
+        self.last_viewport_rows.max(1)
     }
 }
 
@@ -146,14 +195,28 @@ fn handle_server_event(
     ev: ServerEvent,
 ) -> Result<(), String> {
     match ev {
-        ServerEvent::Token(content) => {
-            app.assistant_buf.push_str(&content);
-        }
-        ServerEvent::ToolCall { name, status } => {
-            app.flush_assistant();
+        ServerEvent::Token { content, channel } => match channel {
+            TokenChannel::Thinking => {
+                app.thinking_buf.push_str(&content);
+                app.scroll_bottom();
+            }
+            TokenChannel::Content => {
+                app.assistant_buf.push_str(&content);
+                app.scroll_bottom();
+            }
+        },
+        ServerEvent::ToolCall { name, status, args } => {
+            app.flush_streaming();
+            let mut detail = format_tool_args(&args);
+            let status_label = tool_status_label(&status);
+            if !detail.is_empty() {
+                detail = format!("{}\n{}", status_label, detail);
+            } else {
+                detail = status_label;
+            }
             app.lines.push(ChatLine::Tool {
                 name: name.clone(),
-                detail: tool_status_label(&status),
+                detail,
                 ok: true,
             });
             app.status = format!("tool: {} …", name);
@@ -163,13 +226,14 @@ fn handle_server_event(
             success,
             output,
         } => {
-            let preview: String = output.lines().take(3).collect::<Vec<_>>().join("\n");
+            let preview: String = output.lines().take(8).collect::<Vec<_>>().join("\n");
             app.lines.push(ChatLine::Tool {
                 name,
                 detail: preview,
                 ok: success,
             });
-            app.scroll = u16::MAX;
+            app.follow_tail = true;
+            app.scroll_y = usize::MAX;
         }
         ServerEvent::ApprovalRequest {
             proposal_id,
@@ -182,14 +246,20 @@ fn handle_server_event(
             app.status = "approval required — y/n".into();
         }
         ServerEvent::TurnComplete { content } => {
-            if !app.assistant_buf.is_empty() {
-                app.flush_assistant();
-            } else if !content.is_empty() && content != "(cancelled)" {
-                app.lines.push(ChatLine::Assistant(content));
+            app.flush_streaming();
+            if !content.is_empty() && content != "(cancelled)" {
+                let already = matches!(
+                    app.lines.last(),
+                    Some(ChatLine::Assistant(c)) if c == &content
+                );
+                if !already {
+                    app.lines.push(ChatLine::Assistant(content));
+                }
             }
             app.busy = false;
             app.status = format!("{} · {}", app.profile, app.model);
-            app.scroll = u16::MAX;
+            app.follow_tail = true;
+            app.scroll_y = usize::MAX;
         }
         ServerEvent::Ready(info) => {
             app.profile = info.profile;
@@ -215,7 +285,7 @@ fn handle_server_event(
             app.status = format!("{} · {}", app.profile, app.model);
         }
         ServerEvent::Error { message } => {
-            app.flush_assistant();
+            app.flush_streaming();
             app.push_error(message);
             app.busy = false;
             app.status = format!("{} · {}", app.profile, app.model);
@@ -286,10 +356,20 @@ fn handle_input_key(
             app.input.push(c);
         }
         KeyCode::PageUp => {
-            app.scroll = app.scroll.saturating_sub(5);
+            app.follow_tail = false;
+            app.scroll_y = app.scroll_y.saturating_sub(app.page_step());
         }
         KeyCode::PageDown => {
-            app.scroll = app.scroll.saturating_add(5);
+            app.follow_tail = false;
+            app.scroll_y = app.scroll_y.saturating_add(app.page_step());
+        }
+        KeyCode::Home => {
+            app.follow_tail = false;
+            app.scroll_y = 0;
+        }
+        KeyCode::End => {
+            app.follow_tail = true;
+            app.scroll_y = usize::MAX;
         }
         _ => {}
     }
@@ -304,6 +384,7 @@ fn submit_line(app: &mut App, session: &mut SocketSession, line: &str) -> Result
     app.busy = true;
     app.status = "thinking…".into();
     app.assistant_buf.clear();
+    app.thinking_buf.clear();
     session.send_chat(line)?;
     Ok(())
 }
@@ -313,10 +394,49 @@ fn handle_slash(app: &mut App, session: &mut SocketSession, cmd: &str) -> Result
     let head = parts.next().unwrap_or("").to_lowercase();
     match head.as_str() {
         "help" | "h" | "?" => {
-            app.push_system(
+            let skill_list = skills::list_skills().join(", ");
+            app.push_system(format!(
                 "Commands: /help /quit /clear /new /cancel /model /status [target]\n\
-                 Approval: y approve · n dismiss",
-            );
+                 /audit [search Q] · /audit show <id> · /skills\n\
+                 Skills: {}\n\
+                 Approval: y/n · Home/End scroll · PgUp/PgDn",
+                if skill_list.is_empty() {
+                    "(none installed)".into()
+                } else {
+                    skill_list
+                }
+            ));
+        }
+        "skills" => {
+            let list = skills::list_skills();
+            if list.is_empty() {
+                app.push_system("No skills in /etc/agntos/skills or ~/.config/agntos/skills");
+            } else {
+                app.push_system(format!("Skills: {}", list.join(", ")));
+            }
+        }
+        "audit" => {
+            let sub = parts.next().unwrap_or("list");
+            app.busy = true;
+            match sub {
+                "show" => {
+                    let id = parts.next().ok_or_else(|| "usage: /audit show <id>".to_string())?;
+                    app.status = "audit show…".into();
+                    session.send_audit_show(id)?;
+                }
+                "search" => {
+                    let q = parts.collect::<Vec<_>>().join(" ");
+                    if q.is_empty() {
+                        return Err("usage: /audit search <query>".into());
+                    }
+                    app.status = "audit search…".into();
+                    session.send_audit_search(&q, 20)?;
+                }
+                _ => {
+                    app.status = "audit list…".into();
+                    session.send_audit_list(20)?;
+                }
+            }
         }
         "quit" | "exit" | "q" => return Err("quit".into()),
         "clear" => {
@@ -326,6 +446,7 @@ fn handle_slash(app: &mut App, session: &mut SocketSession, cmd: &str) -> Result
         "new" => {
             app.lines.clear();
             app.assistant_buf.clear();
+            app.thinking_buf.clear();
             let _ = session.send_init();
             app.push_system("New session.");
         }
@@ -343,12 +464,21 @@ fn handle_slash(app: &mut App, session: &mut SocketSession, cmd: &str) -> Result
             app.status = format!("inspect {}…", target);
             session.send_status(target)?;
         }
+        other if skills::list_skills().iter().any(|s| s == other) => {
+            let prompt = skills::skill_prompt(other)?;
+            app.push_system(format!("Loaded skill /{}", other));
+            app.busy = true;
+            app.status = format!("skill {}…", other);
+            app.assistant_buf.clear();
+            app.thinking_buf.clear();
+            session.send_chat(&prompt)?;
+        }
         other => app.push_error(format!("Unknown command: /{}", other)),
     }
     Ok(())
 }
 
-fn draw_ui(f: &mut Frame, app: &App) {
+fn draw_ui(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -358,10 +488,15 @@ fn draw_ui(f: &mut Frame, app: &App) {
         ])
         .split(f.area());
 
+    let scroll_hint = if app.follow_tail {
+        ""
+    } else {
+        " · scroll"
+    };
     let header = Paragraph::new(Text::from(vec![
         Line::from(vec![
             Span::styled(" agnt ", Style::new().bold()),
-            Span::raw(&app.status),
+            Span::raw(format!("{}{}", app.status, scroll_hint)),
         ]),
     ]))
     .block(
@@ -371,24 +506,26 @@ fn draw_ui(f: &mut Frame, app: &App) {
     );
     f.render_widget(header, chunks[0]);
 
-    let chat_lines: Vec<Line> = app
-        .lines
-        .iter()
-        .flat_map(line_to_ratatui)
-        .collect();
+    let chat_lines = build_chat_lines(app);
+    let inner_width = chunks[1].width.saturating_sub(2);
     let chat_height = chunks[1].height.saturating_sub(2) as usize;
-    let total = chat_lines.len();
-    let max_scroll = total.saturating_sub(chat_height);
-    let scroll = if app.scroll == u16::MAX {
+    app.last_viewport_rows = chat_height.max(1);
+
+    let chat_block = Block::default().borders(Borders::ALL).title(" Chat ");
+    let chat_text = Text::from(chat_lines);
+    let total_rows = wrapped_line_count(&chat_text.lines, inner_width);
+    let chat_para = Paragraph::new(chat_text)
+        .block(chat_block)
+        .wrap(Wrap { trim: false });
+    let max_scroll = total_rows.saturating_sub(chat_height);
+    let scroll_y = if app.follow_tail || app.scroll_y == usize::MAX {
         max_scroll
     } else {
-        (app.scroll as usize).min(max_scroll)
+        app.scroll_y.min(max_scroll)
     };
+    app.scroll_y = scroll_y;
 
-    let chat = Paragraph::new(Text::from(chat_lines))
-        .block(Block::default().borders(Borders::ALL).title(" Chat "))
-        .wrap(Wrap { trim: false })
-        .scroll((scroll as u16, 0));
+    let chat = chat_para.scroll((scroll_y as u16, 0));
     f.render_widget(chat, chunks[1]);
 
     let input_title = if app.busy {
@@ -405,16 +542,51 @@ fn draw_ui(f: &mut Frame, app: &App) {
     }
 }
 
+fn build_chat_lines(app: &App) -> Vec<Line<'static>> {
+    let mut out: Vec<Line<'static>> = app.lines.iter().flat_map(line_to_ratatui).collect();
+    if !app.thinking_buf.is_empty() {
+        out.extend(markdown::render_markdown_prefixed(
+            &app.thinking_buf,
+            Some(("think ", thinking_label_style())),
+            thinking_body_style(),
+        ));
+    }
+    if !app.assistant_buf.is_empty() {
+        out.extend(markdown::render_markdown_prefixed(
+            &app.assistant_buf,
+            Some(("agnt ", assistant_label_style())),
+            Style::new(),
+        ));
+    }
+    out
+}
+
+fn thinking_label_style() -> Style {
+    Style::new()
+        .add_modifier(Modifier::DIM | Modifier::ITALIC | Modifier::BOLD)
+}
+
+fn thinking_body_style() -> Style {
+    Style::new().add_modifier(Modifier::DIM | Modifier::ITALIC)
+}
+
+fn assistant_label_style() -> Style {
+    Style::new().green().bold()
+}
+
 fn line_to_ratatui(line: &ChatLine) -> Vec<Line<'static>> {
     match line {
-        ChatLine::User(s) => vec![Line::from(vec![
-            Span::styled("you ", Style::new().cyan().bold()),
-            Span::raw(s.clone()),
-        ])],
-        ChatLine::Assistant(s) => vec![Line::from(vec![
-            Span::styled("agnt ", Style::new().green().bold()),
-            Span::raw(s.clone()),
-        ])],
+        ChatLine::User(s) => multiline_prefix_lines("you ", Style::new().cyan().bold(), s),
+        ChatLine::Thinking(s) => markdown::render_markdown_prefixed(
+            s,
+            Some(("think ", thinking_label_style())),
+            thinking_body_style(),
+        ),
+        ChatLine::Assistant(s) => markdown::render_markdown_prefixed(
+            s,
+            Some(("agnt ", assistant_label_style())),
+            Style::new(),
+        ),
         ChatLine::Tool { name, detail, ok } => {
             let style = if *ok {
                 Style::new().yellow()
@@ -429,21 +601,62 @@ fn line_to_ratatui(line: &ChatLine) -> Vec<Line<'static>> {
                         style,
                     ),
                 ]),
-                Line::from(Span::styled(
-                    detail.clone(),
-                    Style::new().add_modifier(Modifier::DIM),
-                )),
             ]
+            .into_iter()
+            .chain(multiline_plain_lines(
+                detail,
+                Style::new().add_modifier(Modifier::DIM),
+            ))
+            .collect()
         }
-        ChatLine::System(s) => vec![Line::from(Span::styled(
-            s.clone(),
-            Style::new().add_modifier(Modifier::DIM),
-        ))],
+        ChatLine::System(s) => {
+            multiline_plain_lines(s, Style::new().add_modifier(Modifier::DIM))
+        }
         ChatLine::Error(s) => vec![Line::from(Span::styled(
             s.clone(),
             Style::new().fg(Color::Red),
         ))],
     }
+}
+
+fn wrapped_line_count(lines: &[Line], width: u16) -> usize {
+    let w = usize::from(width.max(1));
+    lines
+        .iter()
+        .map(|line| {
+            let line_w = line.width();
+            if line_w == 0 {
+                1
+            } else {
+                line_w.div_ceil(w)
+            }
+        })
+        .sum()
+}
+
+fn multiline_prefix_lines(label: &str, label_style: Style, text: &str) -> Vec<Line<'static>> {
+    text.split('\n')
+        .enumerate()
+        .map(|(i, part)| {
+            if i == 0 {
+                Line::from(vec![
+                    Span::styled(label.to_string(), label_style),
+                    Span::raw(part.to_string()),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::raw(" ".repeat(label.len())),
+                    Span::raw(part.to_string()),
+                ])
+            }
+        })
+        .collect()
+}
+
+fn multiline_plain_lines(text: &str, style: Style) -> Vec<Line<'static>> {
+    text.split('\n')
+        .map(|part| Line::from(Span::styled(part.to_string(), style)))
+        .collect()
 }
 
 fn draw_approval(f: &mut Frame, approval: &ApprovalState) {
@@ -468,6 +681,20 @@ fn draw_approval(f: &mut Frame, approval: &ApprovalState) {
         ]),
     ];
     f.render_widget(Paragraph::new(text).block(block), area);
+}
+
+fn format_tool_args(args: &serde_json::Value) -> String {
+    if args.is_null() || args.as_object().is_some_and(|o| o.is_empty()) {
+        return String::new();
+    }
+    let pretty = serde_json::to_string_pretty(args).unwrap_or_else(|_| args.to_string());
+    const MAX: usize = 480;
+    if pretty.len() <= MAX {
+        pretty
+    } else {
+        let end = pretty.floor_char_boundary(MAX);
+        format!("{}…", &pretty[..end])
+    }
 }
 
 fn tool_status_label(status: &agnt_common::wire::ToolCallStatus) -> String {
@@ -504,5 +731,11 @@ mod tests {
     #[test]
     fn should_use_tui_when_tty() {
         assert!(!should_use_tui(true));
+    }
+
+    #[test]
+    fn wrapped_line_count_splits_long_lines() {
+        let lines = vec![Line::from("x".repeat(80))];
+        assert_eq!(wrapped_line_count(&lines, 20), 4);
     }
 }

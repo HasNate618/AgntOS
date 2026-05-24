@@ -75,7 +75,11 @@ pub enum ServerMessage {
         data: serde_json::Value,
     },
     #[serde(rename = "token")]
-    Token { content: String },
+    Token {
+        content: String,
+        #[serde(default)]
+        channel: TokenChannel,
+    },
     #[serde(rename = "tool_call")]
     ToolCall {
         id: String,
@@ -107,6 +111,14 @@ pub enum ServerMessage {
     },
     #[serde(rename = "error")]
     Error { message: String },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenChannel {
+    #[default]
+    Content,
+    Thinking,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,7 +164,23 @@ mod tests {
         let json = r#"{"type":"token","content":"hello"}"#;
         let msg: ServerMessage = serde_json::from_str(json).unwrap();
         match msg {
-            ServerMessage::Token { content } => assert_eq!(content, "hello"),
+            ServerMessage::Token { content, channel } => {
+                assert_eq!(content, "hello");
+                assert_eq!(channel, TokenChannel::Content);
+            }
+            _ => panic!("expected Token"),
+        }
+    }
+
+    #[test]
+    fn server_message_thinking_token() {
+        let json = r#"{"type":"token","content":"hmm","channel":"thinking"}"#;
+        let msg: ServerMessage = serde_json::from_str(json).unwrap();
+        match msg {
+            ServerMessage::Token { content, channel } => {
+                assert_eq!(content, "hmm");
+                assert_eq!(channel, TokenChannel::Thinking);
+            }
             _ => panic!("expected Token"),
         }
     }

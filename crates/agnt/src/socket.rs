@@ -1,4 +1,6 @@
-use agnt_common::wire::{ClientMessage, ServerMessage, ToolCallStatus};
+use agnt_common::wire::{
+    AuditRequestAction, ClientMessage, ServerMessage, TokenChannel, ToolCallStatus,
+};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -15,10 +17,14 @@ pub struct SessionInfo {
 #[derive(Debug, Clone)]
 pub enum ServerEvent {
     Ready(SessionInfo),
-    Token(String),
+    Token {
+        content: String,
+        channel: TokenChannel,
+    },
     ToolCall {
         name: String,
         status: ToolCallStatus,
+        args: serde_json::Value,
     },
     ToolResult {
         name: String,
@@ -131,6 +137,33 @@ impl SocketSession {
         })
     }
 
+    pub fn send_audit_list(&mut self, limit: u32) -> Result<(), String> {
+        self.send_json(&ClientMessage::Audit {
+            action: AuditRequestAction::List,
+            query: None,
+            id: None,
+            limit,
+        })
+    }
+
+    pub fn send_audit_search(&mut self, query: &str, limit: u32) -> Result<(), String> {
+        self.send_json(&ClientMessage::Audit {
+            action: AuditRequestAction::Search,
+            query: Some(query.to_string()),
+            id: None,
+            limit,
+        })
+    }
+
+    pub fn send_audit_show(&mut self, id: &str) -> Result<(), String> {
+        self.send_json(&ClientMessage::Audit {
+            action: AuditRequestAction::Show,
+            query: None,
+            id: Some(id.to_string()),
+            limit: 20,
+        })
+    }
+
     pub fn send_approve(&mut self, proposal_id: &str) -> Result<(), String> {
         self.send_json(&ClientMessage::Approve {
             proposal_id: proposal_id.to_string(),
@@ -196,9 +229,9 @@ fn parse_event(line: &str) -> Option<ServerEvent> {
             model,
             pending_proposals,
         })),
-        ServerMessage::Token { content } => Some(ServerEvent::Token(content)),
-        ServerMessage::ToolCall { name, status, .. } => {
-            Some(ServerEvent::ToolCall { name, status })
+        ServerMessage::Token { content, channel } => Some(ServerEvent::Token { content, channel }),
+        ServerMessage::ToolCall { name, status, args, .. } => {
+            Some(ServerEvent::ToolCall { name, status, args })
         }
         ServerMessage::ToolResult {
             name,
@@ -247,7 +280,10 @@ mod tests {
     fn parse_token_event() {
         let line = r#"{"type":"token","content":"hi"}"#;
         match parse_event(line).unwrap() {
-            ServerEvent::Token(s) => assert_eq!(s, "hi"),
+            ServerEvent::Token { content, channel } => {
+                assert_eq!(content, "hi");
+                assert_eq!(channel, TokenChannel::Content);
+            }
             _ => panic!("expected token"),
         }
     }
