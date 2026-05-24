@@ -336,10 +336,14 @@ fn sanitize_package_name(name: &str) -> String {
     if words.is_empty() {
         return String::new();
     }
-    let raw = if words.iter().any(|w| PROSE.contains(&w.as_str())) {
+    let raw = if words.len() == 1 {
         words[0].clone()
-    } else {
+    } else if words.iter().any(|w| PROSE.contains(&w.as_str())) {
+        words[0].clone()
+    } else if words.len() == 2 {
         words.join("-")
+    } else {
+        words[0].clone()
     };
     raw.replace(|c: char| !c.is_alphanumeric() && c != '-', "")
 }
@@ -367,6 +371,13 @@ mod tests {
         let p = generate("install curl for testing").unwrap();
         assert!(p.nix_changes.contains("pkgs.curl"));
         assert!(!p.nix_changes.contains("curl-for-testing"));
+    }
+
+    #[test]
+    fn install_uses_first_word_for_long_descriptions() {
+        let p = generate("install btop process monitor").unwrap();
+        assert!(p.nix_changes.contains("pkgs.btop"));
+        assert!(!p.nix_changes.contains("btop-process-monitor"));
     }
 
     #[test]

@@ -83,13 +83,13 @@ pub fn execute_bash(
         result.push_str("STDERR:\n");
         result.push_str(&stderr);
     }
-    if result.is_empty() {
-        result.push_str(&format!("(exit {})\n", exit_code));
+    if !output.status.success() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&format!("[exit {}]", exit_code));
     }
 
-    if !output.status.success() {
-        return Err(result);
-    }
     Ok(result)
 }
 
@@ -179,8 +179,8 @@ mod tests {
     }
 
     #[test]
-    fn test_bash_failure() {
-        let result = execute_bash("exit 1", None, false);
-        assert!(result.is_err());
+    fn test_bash_nonzero_exit_returns_output() {
+        let result = execute_bash("exit 1", None, false).unwrap();
+        assert!(result.contains("[exit 1]"));
     }
 }
