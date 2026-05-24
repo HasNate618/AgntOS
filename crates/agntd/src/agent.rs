@@ -6,7 +6,7 @@
 //! 2. The LLM is called with the full message history and the AgntOS tool definitions.
 //! 3. If the LLM returns tool calls, each is executed via `agntctl` (with interactive
 //!    confirmation for the `apply` tool).  Tool results are fed back as `"tool"` messages
-//!    and the loop repeats up to a depth limit.
+//!    and the loop repeats until the model returns without tool calls.
 //! 4. When the LLM returns a plain text response it is printed and the turn ends.
 //!
 //! ## Socket / daemon mode
@@ -89,9 +89,7 @@ pub fn process_prompt(input: &str, bootstrap: &DaemonBootstrap) -> Result<String
         json!({"role": "user", "content": input}),
     ];
 
-    let mut depth = 0;
-    while depth < 8 {
-        depth += 1;
+    loop {
         let resp = bootstrap
             .runtime
             .block_on(bootstrap.client.complete(&messages, &bootstrap.tools))?;
@@ -99,7 +97,6 @@ pub fn process_prompt(input: &str, bootstrap: &DaemonBootstrap) -> Result<String
 
         if resp.tool_calls.is_empty() {
             let content = resp.content;
-            // Persist
             let sid = SessionStore::new_session_id();
             let _ = bootstrap
                 .session_store
@@ -122,8 +119,6 @@ pub fn process_prompt(input: &str, bootstrap: &DaemonBootstrap) -> Result<String
             }));
         }
     }
-
-    Err("Tool-call depth limit reached".to_string())
 }
 
 /// Processes one user input through the LLM tool-calling loop.
@@ -149,9 +144,7 @@ pub fn agent_turn(
         "content": input,
     }));
 
-    let mut depth = 0;
-    while depth < 8 {
-        depth += 1;
+    loop {
         let resp = runtime.block_on(
             state
                 .client
@@ -159,7 +152,6 @@ pub fn agent_turn(
         )?;
         state.messages.push(resp.assistant_message.clone());
 
-        // Plain text response — content was already streamed to stdout.
         if resp.tool_calls.is_empty() {
             if !resp.content.trim().is_empty() {
                 let _ = state.session_store.append_turn(
@@ -174,7 +166,6 @@ pub fn agent_turn(
             return Ok(());
         }
 
-        // Execute each tool call and feed results back to the LLM.
         for tc in &resp.tool_calls {
             let result = match execute_tool_call(tc, Some(input)) {
                 Ok(s) => s,
@@ -191,8 +182,6 @@ pub fn agent_turn(
             }));
         }
     }
-
-    Err("Tool-call depth limit reached".to_string())
 }
 
 /// Executes a single tool call by delegating to `agntctl` (or the in-process memory module).

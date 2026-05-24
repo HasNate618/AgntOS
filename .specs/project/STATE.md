@@ -8,7 +8,7 @@
 
 1. **Done:** [wedge-a](../features/wedge-a/spec.md) v1 + WA-013/014, [tui-polish](../features/tui-polish/spec.md).
 2. **Next:** greenfield workstation edition, `web_fetch`/`web_search`, `agnt-gateway`, `nixosModules` export (see ROADMAP Wedge A).
-3. **Fixed (2026-05-24):** TUI stuck on busy after tool-heavy turns (`TurnComplete` on depth limit); dev VM `apply` permission on `/etc/agntos/packages`; `agntd` systemd `path` (was invalid `Path` key).
+3. **Fixed (2026-05-24):** TUI stuck on busy when socket turn ended without `turn_complete`; dev VM `apply` permission on `/etc/agntos/packages`; `agntd` systemd `path` (was invalid `Path` key). Per-turn tool depth cap removed — loop runs until the model stops calling tools.
 
 Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Host entrypoint: `./scripts/dev-vm.sh` (or `./dev`) — build, start, tmux attach, eval.
 
@@ -266,7 +266,7 @@ Current: terminal REPL. Future:
 - **LLM latency**: synchronous API calls. Mitigation: streaming, local model option.
 - **Prompt injection in bash**: LLM could craft destructive commands. Mitigation: system prompt forbids destructive patterns, audit log provides accountability, rollback provides recovery.
 - **Nix rebuild time**: `nixos-rebuild` can be slow. Mitigation: `--no-rebuild` flag, user chooses when to rebuild.
-- **Agent loop infinite regress**: tool call depth limit (5).
+- **Agent loop infinite regress**: no hard cap; user can `/cancel` in TUI or stop `agntd`.
 
 ## Deferred Ideas
 
