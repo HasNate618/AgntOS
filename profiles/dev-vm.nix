@@ -7,7 +7,7 @@
   agntos.rebuild.flakeUri = "/mnt/agntos-src#agntos-dev-vm";
 
   environment.etc."agntos/settings.json".text = builtins.toJSON {
-    auto_apply = "auto";
+    auto_apply = "manual";
   };
 
   environment.etc."agntos/models.toml".text = ''

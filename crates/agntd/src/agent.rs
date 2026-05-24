@@ -214,9 +214,7 @@ fn execute_tool_call(tc: &ToolCall, user_prompt: Option<&str>) -> Result<String,
                 cmd.push("--rationale");
                 cmd.push(rationale);
             }
-            let out = command_result(util::run_agntctl(&cmd))?;
-            util::maybe_auto_apply_after_propose(&cfg, &out)?;
-            Ok(out)
+            command_result(util::run_agntctl(&cmd))
         }
         "audit" => {
             let action = args
@@ -428,9 +426,56 @@ fn execute_tool_call(tc: &ToolCall, user_prompt: Option<&str>) -> Result<String,
 pub fn execute_tool_call_gui(
     tc: &ToolCall,
     user_prompt: Option<&str>,
-    _approval_gate: SharedApprovalGate,
+    approval_gate: SharedApprovalGate,
 ) -> Result<String, String> {
-    execute_tool_call(tc, user_prompt)
+    match tc.name.as_str() {
+        "apply" | "rollback" => wait_for_approval_then_run(tc, user_prompt, approval_gate),
+        _ => execute_tool_call(tc, user_prompt),
+    }
+}
+
+fn wait_for_approval_then_run(
+    tc: &ToolCall,
+    user_prompt: Option<&str>,
+    gate: SharedApprovalGate,
+) -> Result<String, String> {
+    let pid = tc
+        .arguments
+        .get("proposal_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("rollback")
+        .to_string();
+    let summary = if tc.name == "rollback" {
+        "Roll back NixOS generation".to_string()
+    } else {
+        format!("Apply proposal {}", pid)
+    };
+    {
+        let mut g = gate.lock().map_err(|e| e.to_string())?;
+        *g = Some(ApprovalGate {
+            proposal_id: pid.clone(),
+            tool_call_id: tc.id.clone(),
+            summary: summary.clone(),
+            resolved: false,
+            approved: false,
+        });
+    }
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut g = gate.lock().map_err(|e| e.to_string())?;
+        let Some(ref state) = *g else {
+            return Err("Apply cancelled.".to_string());
+        };
+        if state.resolved {
+            let approved = state.approved;
+            *g = None;
+            drop(g);
+            if approved {
+                return execute_tool_call(tc, user_prompt);
+            }
+            return Err("Apply dismissed by user.".to_string());
+        }
+    }
 }
 
 /// Reads pending proposal IDs from the proposals directory for the session_ready message.

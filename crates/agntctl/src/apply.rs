@@ -27,24 +27,43 @@ fn resolve_safe(base: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(base.join(candidate))
 }
 
-/// Returns (program, args) for nixos-rebuild based on whether a flake
-/// environment is detected via `/etc/agntos/flake-info` and whether
-/// `persist` was requested (switch vs test).
-fn rebuild_cmd(dir: &PathBuf, persist: bool) -> std::process::Command {
-    let mut cmd = std::process::Command::new("nixos-rebuild");
+fn running_as_root() -> bool {
+    std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        .unwrap_or(false)
+}
+
+fn nixos_rebuild_args(dir: &PathBuf, persist: bool) -> Vec<String> {
     let action = if persist { "switch" } else { "test" };
+    let mut args = vec![action.to_string()];
     let flake_path = dir.join("flake-info");
     if flake_path.exists() {
         if let Ok(flake_ref) = std::fs::read_to_string(&flake_path) {
-            let trimmed = flake_ref.trim().to_string();
+            let trimmed = flake_ref.trim();
             if !trimmed.is_empty() {
-                cmd.arg(action).arg("--flake").arg(&trimmed).arg("--impure");
-                return cmd;
+                args.push("--flake".into());
+                args.push(trimmed.to_string());
+                args.push("--impure".into());
             }
         }
     }
-    cmd.arg(action);
-    cmd
+    args
+}
+
+fn run_nixos_rebuild(dir: &PathBuf, persist: bool) -> std::io::Result<std::process::Output> {
+    let args = nixos_rebuild_args(dir, persist);
+    if running_as_root() {
+        std::process::Command::new("nixos-rebuild")
+            .args(&args)
+            .output()
+    } else {
+        let mut sudo_args = vec!["nixos-rebuild".to_string()];
+        sudo_args.extend(args);
+        std::process::Command::new("sudo").args(&sudo_args).output()
+    }
 }
 
 pub fn execute(
@@ -171,9 +190,13 @@ pub fn execute(
 
     // Run nixos-rebuild (unless --no-rebuild or --dry-run)
     if !dry_run && !no_rebuild {
-        let mut rebuild_result = rebuild_cmd(&dir, persist);
-        out.push_str(&format!("\n  Running {:?}...\n", rebuild_result));
-        let output = rebuild_result.output();
+        let rebuild_label = if running_as_root() {
+            "nixos-rebuild".to_string()
+        } else {
+            format!("sudo nixos-rebuild {}", nixos_rebuild_args(&dir, persist).join(" "))
+        };
+        out.push_str(&format!("\n  Running {}...\n", rebuild_label));
+        let output = run_nixos_rebuild(&dir, persist);
 
         match output {
             Ok(output) => {
@@ -385,31 +408,29 @@ mod tests {
     }
 
     #[test]
-    fn test_rebuild_cmd_fallback_when_no_flake_info() {
+    fn test_rebuild_args_fallback_when_no_flake_info() {
         let dir = PathBuf::from("/tmp/agntos-apply-no-flake");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let cmd = rebuild_cmd(&dir, false);
-        let args: Vec<&str> = cmd.get_args().map(|a| a.to_str().unwrap_or("")).collect();
-        assert_eq!(args, vec!["test"]);
+        let args = nixos_rebuild_args(&dir, false);
+        assert_eq!(args, vec!["test".to_string()]);
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn test_rebuild_cmd_detects_flake() {
+    fn test_rebuild_args_detects_flake() {
         let dir = PathBuf::from("/tmp/agntos-apply-flake");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("flake-info"), "/home/user/config#my-machine\n").unwrap();
-        let cmd = rebuild_cmd(&dir, false);
-        let args: Vec<&str> = cmd.get_args().map(|a| a.to_str().unwrap_or("")).collect();
+        let args = nixos_rebuild_args(&dir, false);
         assert_eq!(
             args,
             vec![
-                "test",
-                "--flake",
-                "/home/user/config#my-machine",
-                "--impure"
+                "test".to_string(),
+                "--flake".to_string(),
+                "/home/user/config#my-machine".to_string(),
+                "--impure".to_string(),
             ]
         );
         let _ = fs::remove_dir_all(&dir);

@@ -164,6 +164,15 @@ pub fn extract_proposal_id(output: &str) -> Option<String> {
     None
 }
 
+pub fn extract_proposal_summary(output: &str) -> Option<String> {
+    for line in output.lines() {
+        if let Some(stripped) = line.strip_prefix("Summary: ") {
+            return Some(stripped.trim().to_string());
+        }
+    }
+    None
+}
+
 pub fn capture_inspect(target: &str) -> String {
     match run_agntctl(&["inspect", target]) {
         Ok((stdout, stderr, success)) => {

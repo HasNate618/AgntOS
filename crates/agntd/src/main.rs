@@ -403,7 +403,7 @@ fn handle_persistent_session(
                                 );
                                 let approval_msg = ServerMessage::ApprovalRequest {
                                     proposal_id: pid.unwrap_or("rollback").to_string(),
-                                    summary,
+                                    summary: summary.clone(),
                                     tool_call_id: tc.id.clone(),
                                 };
                                 let _ = writeln!(
@@ -414,6 +414,25 @@ fn handle_persistent_session(
                             }
 
                             let result = execute_tool_call_gui(tc, Some(&prompt), gate.clone());
+
+                            if tc.name == "propose" {
+                                if let Ok(ref out) = result {
+                                    if let Some(pid) = util::extract_proposal_id(out) {
+                                        let summary = util::extract_proposal_summary(out)
+                                            .unwrap_or_else(|| "Apply configuration change".to_string());
+                                        let approval_msg = ServerMessage::ApprovalRequest {
+                                            proposal_id: pid,
+                                            summary: summary.clone(),
+                                            tool_call_id: tc.id.clone(),
+                                        };
+                                        let _ = writeln!(
+                                            &mut writer_clone,
+                                            "{}",
+                                            serde_json::to_string(&approval_msg).unwrap()
+                                        );
+                                    }
+                                }
+                            }
                             let tool_ok = result.is_ok();
 
                             match &result {
@@ -475,23 +494,57 @@ fn handle_persistent_session(
                 });
             }
             ClientMessage::Approve { proposal_id } => {
-                let mut gate = approval_gate.lock().unwrap();
-                if let Some(ref mut g) = *gate {
-                    if g.proposal_id == proposal_id {
-                        g.resolved = true;
-                        g.approved = true;
+                {
+                    let mut g = approval_gate.lock().unwrap();
+                    if let Some(ref mut state) = *g {
+                        if state.proposal_id == proposal_id {
+                            state.resolved = true;
+                            state.approved = true;
+                        }
                     }
                 }
+                let cfg = util::config_dir_str();
+                let pid = proposal_id.clone();
+                let mut writer_apply = writer
+                    .try_clone()
+                    .map_err(|e| format!("write clone failed: {}", e))?;
+                thread::spawn(move || {
+                    let result = util::run_agntctl(&["apply", "--config-dir", &cfg, &pid]);
+                    let (output, success) = match result {
+                        Ok((stdout, stderr, ok)) => {
+                            let mut text = stdout;
+                            if !stderr.is_empty() {
+                                if !text.is_empty() {
+                                    text.push('\n');
+                                }
+                                text.push_str(&stderr);
+                            }
+                            (text, ok)
+                        }
+                        Err(e) => (e, false),
+                    };
+                    let tr = ServerMessage::ToolResult {
+                        id: pid.clone(),
+                        name: "apply".to_string(),
+                        output,
+                        success,
+                    };
+                    let _ = writeln!(
+                        &mut writer_apply,
+                        "{}",
+                        serde_json::to_string(&tr).unwrap()
+                    );
+                });
             }
             ClientMessage::Dismiss {
                 proposal_id,
                 reason: _,
             } => {
-                let mut gate = approval_gate.lock().unwrap();
-                if let Some(ref mut g) = *gate {
-                    if g.proposal_id == proposal_id {
-                        g.resolved = true;
-                        g.approved = false;
+                let mut g = approval_gate.lock().unwrap();
+                if let Some(ref mut state) = *g {
+                    if state.proposal_id == proposal_id {
+                        state.resolved = true;
+                        state.approved = false;
                     }
                 }
             }
@@ -900,6 +953,15 @@ mod tests {
     #[test]
     fn test_extract_proposal_id_no_match() {
         assert_eq!(util::extract_proposal_id("No proposal here"), None);
+    }
+
+    #[test]
+    fn test_extract_proposal_summary() {
+        let out = "Proposal: p-abc\nSummary:  Install curl\n";
+        assert_eq!(
+            util::extract_proposal_summary(out),
+            Some("Install curl".to_string())
+        );
     }
 
     #[test]
