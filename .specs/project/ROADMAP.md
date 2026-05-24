@@ -213,6 +213,21 @@ Bidirectional NDJSON over Unix domain socket (`--socket <path>`):
 - Watchdog configuration GUI (CLI via `edit_file` suffices).
 - Permissions and skills management pages.
 
+## Wedge A: Terminal-first agent (2026-05)
+
+Goal: `agnt` TUI + `agntd` socket path on dev VM — primary UX per [VISION.md](./VISION.md).
+
+Deliverables:
+- [x] Ratatui chat TUI with streaming, thinking, markdown, scroll
+- [x] Sample skills + slash commands
+- [x] `./dev` host workflow (build / restart / tmux)
+- [ ] `nixosModules.agntos` flake export (module-first installs)
+- [ ] `web_fetch` / `web_search` native tools
+- [ ] `agnt-gateway` (HTTP/SSE on wire protocol)
+- [ ] Greenfield workstation `nixosConfiguration` in flake
+
+Status: **v1.2 complete** (TUI polish). Next: gateway + web tools + flake module export.
+
 ## Phase 4: Full Distro Packaging
 
 Goal: package AgntOS as a real installable distro.

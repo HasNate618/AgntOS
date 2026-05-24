@@ -7,7 +7,8 @@
 **TLC: wedge-a v1.2 complete — greenfield / gateway next**
 
 1. **Done:** [wedge-a](../features/wedge-a/spec.md) v1 + WA-013/014, [tui-polish](../features/tui-polish/spec.md).
-2. **Next:** greenfield workstation edition, `web_fetch`/`web_search`, `agnt-gateway` (see ROADMAP).
+2. **Next:** greenfield workstation edition, `web_fetch`/`web_search`, `agnt-gateway`, `nixosModules` export (see ROADMAP Wedge A).
+3. **Fixed (2026-05-24):** TUI stuck on busy after tool-heavy turns (`TurnComplete` on depth limit); dev VM `apply` permission on `/etc/agntos/packages`; `agntd` systemd `path` (was invalid `Path` key).
 
 Focus: one end-to-end path (`agnt` → `agntd` → `agntctl` → Nix) on **Cage + Foot + tmux** dev VM. Host entrypoint: `./scripts/dev-vm.sh` (or `./dev`) — build, start, tmux attach, eval.
 
